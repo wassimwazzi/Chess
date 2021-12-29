@@ -14,6 +14,10 @@ UNICODE_PIECE_SYMBOLS = {
     "K": "♔", "k": "♚",
     "P": "♙", "p": "♟",
 }
-DISPLAY_SIZE = 600
+DISPLAY_SIZE = 900
 X_MARGIN = 30
 Y_MARGIN = 30
+
+PLAYER1 = "x"
+PLAYER2 = "human"
+SWITCH_VIEWING_PLAYER = False

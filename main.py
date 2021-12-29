@@ -88,9 +88,9 @@ def update_board_and_players(current_viewing_player, turn_player, switch_viewing
     if switch_viewing_player:
         current_viewing_player = turn_player
     if current_viewing_player == WHITE:
-        board_chars = board.getBoardAsChars()
+        board_chars = board.get_board_as_chars()
     else:
-        board_chars = board.getBoardAsChars(reverse=True)
+        board_chars = board.get_board_as_chars(reverse=True)
 
     drawBoard(DISPLAYSURF)  # draw squares on the board
     drawPieces(DISPLAYSURF, board_chars)  # draw pieces on top of those squares

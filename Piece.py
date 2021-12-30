@@ -157,6 +157,29 @@ def getPawnMoves(pos, pawn_color, board):
     return all_moves
 
 
+def getCastlingMoves(pos, piece_color, board):
+    all_moves = []
+    row, col = pos
+    friendly_pieces = White_pieces if piece_color == WHITE else Black_pieces
+    if piece_color == WHITE:
+        if pos != (7, 4):
+            return []
+        else:
+            if board[7][5] is None and board[7][6] is None and board[7][7] == "R":
+                all_moves.append((7, 6))
+            if board[7][3] is None and board[7][2] is None and board[7][1] is None and board[7][0] == "R":
+                all_moves.append((7, 2))
+    elif piece_color == BLACK:
+        if pos != (0, 4):
+            return []
+        else:
+            if board[0][5] is None and board[0][6] is None and board[0][7] == "r":
+                all_moves.append((0, 6))
+            if board[0][3] is None and board[0][2] is None and board[0][1] is None and board[0][0] == "r":
+                all_moves.append((0, 2))
+    return all_moves
+
+
 class Piece:
 
     def getAllLegalMoves(self, pos, board):
@@ -275,7 +298,8 @@ class King(Piece):
     def getAllLegalMoves(self, pos, board):
         return list(chain(getAllHorizontalMoves(pos, self.color, board, is_king=True),
                           getAllVerticalMoves(pos, self.color, board, is_king=True),
-                          getAllDiagonalMoves(pos, self.color, board, is_king=True)))
+                          getAllDiagonalMoves(pos, self.color, board, is_king=True),
+                          getCastlingMoves(pos, self.color, board)))
 
     def getPieceColor(self):
         return self.color

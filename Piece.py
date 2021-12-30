@@ -182,7 +182,7 @@ def getCastlingMoves(pos, piece_color, board):
 
 class Piece:
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         """
         For a move to be valid, the end tile must not contain a friendly piece, and the trajectory to the tile must not
         be blocked by any piece
@@ -209,7 +209,7 @@ class Rook(Piece):
         self.color = color
         self.value = 5
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         return list(chain(getAllHorizontalMoves(pos, self.color, board), getAllVerticalMoves(pos, self.color, board)))
 
     def getPieceColor(self):
@@ -230,7 +230,7 @@ class Bishop(Piece):
         self.color = color
         self.value = 3
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         return getAllDiagonalMoves(pos, self.color, board)
 
     def getPieceColor(self):
@@ -251,7 +251,7 @@ class Knight(Piece):
         self.color = color
         self.value = 3
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         return getLShapedMoves(pos, self.color, board)
 
     def getPieceColor(self):
@@ -272,7 +272,7 @@ class Queen(Piece):
         self.color = color
         self.value = 9
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         return list(
             chain(getAllHorizontalMoves(pos, self.color, board), getAllVerticalMoves(pos, self.color, board),
                   getAllDiagonalMoves(pos, self.color, board)))
@@ -295,11 +295,16 @@ class King(Piece):
         self.color = color
         self.value = 0
 
-    def getAllLegalMoves(self, pos, board):
-        return list(chain(getAllHorizontalMoves(pos, self.color, board, is_king=True),
-                          getAllVerticalMoves(pos, self.color, board, is_king=True),
-                          getAllDiagonalMoves(pos, self.color, board, is_king=True),
-                          getCastlingMoves(pos, self.color, board)))
+    def getAllLegalMoves(self, pos, board, castling=True):
+        if castling:
+            return list(chain(getAllHorizontalMoves(pos, self.color, board, is_king=True),
+                              getAllVerticalMoves(pos, self.color, board, is_king=True),
+                              getAllDiagonalMoves(pos, self.color, board, is_king=True),
+                              getCastlingMoves(pos, self.color, board)))
+        else:
+            return list(chain(getAllHorizontalMoves(pos, self.color, board, is_king=True),
+                              getAllVerticalMoves(pos, self.color, board, is_king=True),
+                              getAllDiagonalMoves(pos, self.color, board, is_king=True)))
 
     def getPieceColor(self):
         return self.color
@@ -319,7 +324,7 @@ class Pawn(Piece):
         self.color = color
         self.value = 1
 
-    def getAllLegalMoves(self, pos, board):
+    def getAllLegalMoves(self, pos, board, castling=True):
         return getPawnMoves(pos, self.color, board)
 
     def getPieceColor(self):

@@ -1,7 +1,7 @@
 import sys
 
 import pygame as p
-
+from Status import Status
 from Board import Board
 from config import BOARD_SIZE, X_MARGIN, Y_MARGIN, DISPLAY_SIZE, WHITE, PLAYER1, BLACK, SWITCH_VIEWING_PLAYER
 
@@ -33,6 +33,7 @@ def main():
     current_viewing_player = WHITE if switch_viewing_player or PLAYER1 == 'human' else BLACK
     update_board_and_players(current_viewing_player, turn_player,
                              switch_viewing_player, board, DISPLAYSURF, update_turn_player=False)
+    highlight_color = p.Color("red")
     while True:
         for event in p.event.get():
             if event.type == p.QUIT:
@@ -40,6 +41,7 @@ def main():
                 sys.exit()
             elif event.type == p.MOUSEBUTTONDOWN:
                 col, row = p.mouse.get_pos()  # (x, y) location of the mouse
+                board_as_chars = getBoardAsChars(board, current_viewing_player)
 
                 if is_board_pressed(col, row):
                     print("Mouse Clicked inside board")
@@ -49,21 +51,42 @@ def main():
                     if prev_selection is None:
                         prev_selection = selected_square
                         print("Setting prev_selection to: {}".format(prev_selection))
+                        highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=highlight_color)
 
                     elif prev_selection == selected_square:
-                        prev_selection = None
                         print("Setting prev_selection to: {}".format(prev_selection))
+                        color = getSquareColor(prev_selection)
+                        highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
+                        prev_selection = None
 
                     else:
-                        print("Make move from {} to {}".format(prev_selection, selected_square))
-                        if board.make_move(prev_selection, selected_square):
+                        result = board.make_move(prev_selection, selected_square)
+                        if result == Status.OK:
+                            color = getSquareColor(prev_selection)
+                            highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
                             update_board_and_players(current_viewing_player, turn_player,
                                                      switch_viewing_player, board, DISPLAYSURF)
+                        elif result == Status.NEED_MORE_INFORMATION:
+                            if board.make_move(prev_selection, selected_square, promote_to="Queen"):
+                                color = getSquareColor(prev_selection)
+                                highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
+                                update_board_and_players(current_viewing_player, turn_player,
+                                                         switch_viewing_player, board, DISPLAYSURF)
+                            else:
+                                color = getSquareColor(prev_selection)
+                                highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
+                        else:
+                            color = getSquareColor(prev_selection)
+                            highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
+
                         prev_selection = None
                         selected_square = None
                 else:
                     print("Mouse Clicked outside board")
-                    prev_selection = None
+                    if prev_selection:
+                        color = getSquareColor(prev_selection)
+                        highlightSquare(DISPLAYSURF, board_as_chars, prev_selection, color=color)
+                        prev_selection = None
 
             elif event.type == p.KEYDOWN:
                 if event.key == p.K_LEFT:
@@ -73,12 +96,25 @@ def main():
                                                  switch_viewing_player, board, DISPLAYSURF)
 
                 elif event.key == p.K_RIGHT:
-                    print("UNDO GOINGBACK TO PREV BOARD STATE")
+                    print("UNDO GOING BACK TO PREV BOARD STATE")
                     if board.undo_going_back():
                         update_board_and_players(current_viewing_player, turn_player,
                                                  switch_viewing_player, board, DISPLAYSURF)
 
             p.display.update()
+
+
+def getSquareColor(square_pos):
+    row, col = square_pos
+    colors = [p.Color("white"), p.Color("gray")]
+    return colors[((row + col) % 2)]
+
+
+def getBoardAsChars(board, current_viewing_player):
+    if current_viewing_player == WHITE:
+        return board.get_board_as_chars()
+    else:
+        return board.get_board_as_chars(reverse=True)
 
 
 def update_board_and_players(current_viewing_player, turn_player, switch_viewing_player, board, DISPLAYSURF,
@@ -128,13 +164,25 @@ def drawBoard(screen):
     Draw the squares on the board.
     The top left square is always light.
     """
-    global colors
     colors = [p.Color("white"), p.Color("gray")]
     for row in range(BOARD_SIZE):
-        for column in range(BOARD_SIZE):
-            color = colors[((row + column) % 2)]
+        for col in range(BOARD_SIZE):
+            color = colors[((row + col) % 2)]
             p.draw.rect(screen, color,
-                        p.Rect(column * SQUARE_SIZE + X_MARGIN, row * SQUARE_SIZE + Y_MARGIN, SQUARE_SIZE, SQUARE_SIZE))
+                        p.Rect(col * SQUARE_SIZE + X_MARGIN, row * SQUARE_SIZE + Y_MARGIN, SQUARE_SIZE, SQUARE_SIZE))
+
+
+def highlightSquare(screen, board, square_pos, color):
+    row, col = square_pos
+    piece = board[row][col]
+    p.draw.rect(screen, color,
+                p.Rect(col * SQUARE_SIZE + X_MARGIN, row * SQUARE_SIZE + Y_MARGIN, SQUARE_SIZE, SQUARE_SIZE))
+    if piece is not None:
+        screen.blit(IMAGES[piece],
+                    p.Rect(col * SQUARE_SIZE + X_MARGIN, row * SQUARE_SIZE + Y_MARGIN, SQUARE_SIZE,
+                           SQUARE_SIZE))
+
+    print("Square at pos {} set to color {}".format(square_pos, color))
 
 
 def is_board_pressed(col, row):

@@ -377,10 +377,11 @@ class Board:
                     self.board[move[0]][move[1]] = killed_piece
         return True
 
-    def set_king_in_checkmate(self):
+    def set_king_in_checkmate(self, checkmated_king_pos):
         print("Checkmate!!!!!")
         self.checkmate = True
         self.winner = self.turn_player
+        self.checked_king_position = checkmated_king_pos
 
     def get_checked_king_position(self):
         return self.checked_king_position
@@ -620,7 +621,7 @@ class Board:
             opponent_king_pos = self.get_king_pos(1 - self.turn_player)
             if self.is_piece_attacked(opponent_king_pos, board_as_chars, attacking_color=self.turn_player):
                 if self.is_king_in_checkmate(opponent_king_pos, board_as_chars):
-                    self.set_king_in_checkmate()
+                    self.set_king_in_checkmate(opponent_king_pos)
                     return Status.CHECKMATE
                 else:
                     return self.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)

@@ -3,7 +3,7 @@ from logging import log
 from Status import Status
 
 from Piece import Rook, Bishop, Knight, King, Queen, Pawn
-from config import BOARD_SIZE, STARTING_POSITION, BLACK, WHITE
+from config import BOARD_DIMENSIONS, STARTING_POSITION, BLACK, WHITE
 
 """
 The Board is viewed in reverse. Index (0,0) of board represents the a8 square in a chess board
@@ -13,13 +13,13 @@ The Board is viewed in reverse. Index (0,0) of board represents the a8 square in
 class Board:
 
     def __init__(self):
+        self.en_passant = []
         self.prev_boards = []
         self.undone_boards = []
         self.white_score = 0
         self.black_score = 0
         self.turn_player = WHITE
-        self.remaining_black_pieces = {"r": [], "b": [], "n": [], "k": [], "q": [], "p": []}
-        self.remaining_white_pieces = {"R": [], "B": [], "N": [], "K": [], "Q": [], "P": []}
+        self.remaining_pieces = {}
         self.killed_white_pieces = []
         self.killed_black_pieces = []
         self.half_turns = 0
@@ -31,6 +31,7 @@ class Board:
         self.unmoved_pieces = ["K", "Rl", "Rr", "k", "rl", "rr"]
         self.board = self.create_board()
         self.checkmate = False
+        self.draw = False
         self.winner = None
         self.POSSIBLE_PROMOTIONS = {
             "Bishop": Bishop,
@@ -38,6 +39,7 @@ class Board:
             "Queen": Queen,
             "Rook": Rook
         }
+        self.checked_king_position = None
 
     def copy_from(self, target):
         for key in target:
@@ -55,7 +57,11 @@ class Board:
             "half_turns": self.half_turns,
             "turns": self.half_turns,
             "unmoved_pieces": self.unmoved_pieces,
-            "turn_player": self.turn_player
+            "turn_player": self.turn_player,
+            "remaining_pieces": self.remaining_pieces,
+            "killed_white_pieces": self.killed_white_pieces,
+            "killed_black_pieces": self.killed_black_pieces,
+            "checked_king_position": self.checked_king_position
         }
         return copy.deepcopy(x)
 
@@ -72,10 +78,11 @@ class Board:
                     row, row_index
                 ))
 
-            if char.isupper():
-                self.remaining_white_pieces[char].append((row_index, col_index))
-            elif char.islower():
-                self.remaining_black_pieces[char].append((row_index, col_index))
+            if char.isalpha():
+                if self.remaining_pieces.get(char):
+                    self.remaining_pieces[char] += 1
+                else:
+                    self.remaining_pieces[char] = 1
 
             # region WHITE PIECES
             if char == 'R':
@@ -123,7 +130,7 @@ class Board:
             ))
 
     def create_board(self):
-        board = [[None] * BOARD_SIZE for _ in range(BOARD_SIZE)]
+        board = [[None] * BOARD_DIMENSIONS for _ in range(BOARD_DIMENSIONS)]
         piece_pos = STARTING_POSITION.split(' ')[0]
         rows = piece_pos.split('/')
         assert len(rows) == 8, 'NUMBER OF ROWS IN FEN is not equal to 8, CANNOT CREATE BOARD'
@@ -163,21 +170,11 @@ class Board:
         elif score_difference < 0:
             return BLACK, score_difference
 
-    def update_remaining_pieces(self, piece, start_pos, end_pos):
-        if self.turn_player == WHITE:
-            self.remaining_white_pieces[piece].remove(start_pos)
-            self.remaining_white_pieces[piece].append(end_pos)
-        elif self.turn_player == BLACK:
-            self.remaining_black_pieces[piece].remove(start_pos)
-            self.remaining_black_pieces[piece].append(end_pos)
-
-    def add_killed_piece(self, piece, piece_pos):
+    def add_killed_piece(self, piece):
         if self.turn_player == WHITE:
             self.killed_black_pieces.append(piece)
-            # self.remaining_black_pieces[piece].remove(piece_pos)
         else:
             self.killed_white_pieces.append(piece)
-            # self.remaining_white_pieces[piece].remove(piece_pos)
 
     def get_board_as_chars(self, reverse=False):
         board_as_chars = []
@@ -209,7 +206,7 @@ class Board:
     def change_turn_player(self):
         self.turn_player = 1 - self.turn_player
 
-    def go_back_a_move(self, change_player=True):
+    def go_back_a_move(self):
         if len(self.prev_boards) == 0:
             print("NO PREVIOUS MOVES")
             return Status.INVALID_REQUEST
@@ -242,7 +239,7 @@ class Board:
             attacking_color = 1 - self.turn_player
         for i, row in enumerate(self.board):
             for j, piece in enumerate(row):
-                if piece is not None and piece.getPieceColor() == attacking_color and piece_pos in piece.getAllLegalMoves(
+                if piece is not None and piece.getPieceColor() == attacking_color and piece_pos in piece.getAllPseudoLegalMoves(
                         pos=(i, j), board=board_as_chars):
                     result = True
                     if break_at_first_finding:
@@ -273,6 +270,7 @@ class Board:
             return self.black_king_checked
 
     def remove_check(self):
+        self.checked_king_position = None
         if self.turn_player == WHITE:
             self.white_king_checked = False
         else:
@@ -290,49 +288,51 @@ class Board:
         else:
             return self.can_black_king_castle
 
-    def castle(self, start_piece, start_row, start_col, end_row, end_col):
+    def can_castle(self, start_pos, end_pos, start_piece, end_piece):
+        start_row, start_col = start_pos
+        end_row, end_col = end_pos
         if not self.can_king_castle():
             print("This King can no longer Castle!")
-            self.prev_boards.pop()
-            return Status.INVALID_REQUEST
+            return False
 
         if self.is_king_in_check():
             print("Can't Castle while in Check!")
-            self.prev_boards.pop()
-            return Status.INVALID_REQUEST
+            return False
 
         board_as_chars = self.get_board_as_chars()
         if self.is_piece_attacked((end_row, end_col), board_as_chars):
             print("Can't Castle, King will be in check")
-            self.prev_boards.pop()
-            return Status.INVALID_REQUEST
+            return False
 
         if start_col > end_col:
             if self.is_piece_attacked((end_row, end_col + 1), board_as_chars):
                 print("Can't Castle, King will pass through check")
-                self.prev_boards.pop()
-            return Status.INVALID_REQUEST
+            return False
 
         else:
             if self.is_piece_attacked((end_row, end_col - 1), board_as_chars):
                 print("Can't Castle, King will pass through check")
-                self.prev_boards.pop()
-                return Status.INVALID_REQUEST
+                return False
 
-        self.board[end_row][end_col] = copy.deepcopy(start_piece)
-        self.board[start_row][start_col] = None
-        if start_col > end_col:
-            self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
-            self.board[end_row][end_col - 2] = None
+        return True
+
+    def castle(self, start_pos, end_pos, start_piece, end_piece):
+        start_row, start_col = start_pos
+        end_row, end_col = end_pos
+        if self.can_castle(start_pos, end_pos, start_piece, end_piece):
+            self.board[end_row][end_col] = copy.deepcopy(start_piece)
+            self.board[start_row][start_col] = None
+            if start_col > end_col:
+                self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
+                self.board[end_row][end_col - 2] = None
+            else:
+                self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
+                self.board[end_row][end_col + 1] = None
+                self.good_move(start_pos, end_piece, castled=True)
+            return Status.OK
         else:
-            self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
-            self.board[end_row][end_col + 1] = None
-        self.prev_boards.append(self.make_copy())
-        self.undone_boards = []
-        self.remove_castling_rights()
-        self.change_turn_player()
-        self.increment_turns()
-        return Status.OK
+            self.bad_move()
+            return Status.INVALID_REQUEST
 
     def update_moved_pieces(self, pos):
         if not self.unmoved_pieces:
@@ -361,7 +361,7 @@ class Board:
             for j, piece in enumerate(row):
                 if piece is None or piece.getPieceColor() == self.turn_player:
                     continue
-                for move in piece.getAllLegalMoves(pos=(i, j), board=board_as_chars, castling=False):
+                for move in piece.getAllPseudoLegalMoves(pos=(i, j), board=board_as_chars, castling=False):
                     piece_pos = king_pos
                     self.board[i][j] = None
                     killed_piece = self.board[move[0]][move[1]]
@@ -382,10 +382,174 @@ class Board:
         self.checkmate = True
         self.winner = self.turn_player
 
+    def get_checked_king_position(self):
+        return self.checked_king_position
+
+    def move_en_passant(self, start_pos, end_pos, start_piece, undo_move=False):
+        start_row, start_col = start_pos
+        end_row, end_col = end_pos
+        self.board[end_row][end_col] = start_piece
+        self.board[start_row][start_col] = None
+        turn_player_king_pos = self.get_king_pos(self.turn_player)
+
+        if self.turn_player == WHITE:
+            killed_piece = self.board[end_row + 1][end_col]
+            self.board[end_row + 1][end_col] = None
+            self.remaining_pieces["p"] -= 1
+            board_as_chars = self.get_board_as_chars()
+            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+                # undo move
+                self.board[end_row][end_col] = None
+                self.board[start_row][start_col] = start_piece
+                self.board[end_row + 1][end_col] = killed_piece
+                self.remaining_pieces["p"] += 1
+                print("King will be in Check!")
+                if not undo_move:
+                    self.bad_move()
+                return Status.INVALID_REQUEST
+        else:
+            killed_piece = self.board[end_row - 1][end_col]
+            self.board[end_row - 1][end_col] = None
+            self.remaining_pieces["P"] -= 1
+            board_as_chars = self.get_board_as_chars()
+            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+                # undo move
+                self.board[end_row][end_col] = None
+                self.board[start_row][start_col] = start_piece
+                self.board[end_row - 1][end_col] = killed_piece
+                self.remaining_pieces["P"] += 1
+                print("King will be in Check!")
+                if not undo_move:
+                    self.bad_move()
+                return Status.INVALID_REQUEST
+
+        if undo_move:
+            self.board[end_row][end_col] = None
+            self.board[start_row][start_col] = start_piece
+            if self.turn_player == WHITE:
+                self.board[end_row + 1][end_col] = killed_piece
+                self.remaining_pieces["p"] += 1
+            else:
+                self.board[end_row - 1][end_col] = killed_piece
+                self.remaining_pieces["P"] += 1
+            return Status.OK
+
+        self.good_move(start_pos, killed_piece)
+        return Status.OK
+
+    def is_stalemate(self):
+        self.turn_player = not self.turn_player
+        for i, row in enumerate(self.board):
+            for j, piece in enumerate(row):
+                if piece is not None and piece.getPieceColor() == self.turn_player:  # only check if opponent pieces can move
+                    if not self.get_all_legal_moves((i, j)) == []:
+                        self.turn_player = not self.turn_player
+                        return False
+        self.turn_player = not self.turn_player
+        return True
+
+    def is_draw_by_insufficient_material(self):
+        sufficient_material = [["K", "N", "B"], ["K", "B", "B"], ["K", "R"], ["K", "Q"], ["K", "P"]]
+        for list in sufficient_material:
+            result_white = 1
+            result_black = 1
+            for piece in list:
+                if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) == 0:
+                    result_white = 0
+                if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) == 0:
+                    result_black = 0
+            if result_white or result_black:
+                return False
+        return True
+
+    def is_draw_by_repetition(self):
+        raise NotImplemented
+
+    def check_draw(self, has_piece_been_captured):
+        # To add draw by repetition
+        if has_piece_been_captured:
+            return self.is_stalemate() and self.is_draw_by_insufficient_material()
+        else:
+            return self.is_stalemate()
+
+    def get_all_legal_moves(self, start_pos):
+        start_row, start_col = start_pos
+        all_moves = []
+        start_piece = self.board[start_row][start_col]
+        if start_piece is None:
+            return []
+        for end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=self.get_board_as_chars()):
+            end_row, end_col = end_pos
+            end_piece = self.board[end_row][end_col]
+
+            if isinstance(start_piece, Pawn) and abs(start_col - end_col) == 1 and end_piece is None:  # En Passant
+                if (end_pos, self.half_turns) in self.en_passant and self.move_en_passant(start_pos, end_pos,
+                                                                                          start_piece,
+                                                                                          undo_move=True) == Status.OK:
+                    all_moves.append(end_pos)
+                    continue
+
+            elif isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
+                if self.can_castle(start_pos, end_pos, start_piece, end_piece):
+                    all_moves.append(end_pos)
+                    continue
+
+            self.board[end_row][end_col] = copy.deepcopy(start_piece)
+            self.board[start_row][start_col] = None
+
+            board_as_chars = self.get_board_as_chars()
+
+            # Check if making the move will put King in Check
+            turn_player_king_pos = self.get_king_pos(self.turn_player)
+            if not self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+                all_moves.append(end_pos)
+
+            # undo move
+            self.board[start_row][start_col] = copy.deepcopy(start_piece)
+            self.board[end_row][end_col] = copy.deepcopy(end_piece)
+        return all_moves
+
+    def good_move(self, start_pos, end_piece, castled=False, opponent_king_pos=None):
+        self.update_moved_pieces(start_pos)
+        self.increment_turns()
+        self.undone_boards = []
+        has_piece_been_captured = False
+
+        if castled:
+            self.remove_castling_rights()
+
+        if end_piece:
+            end_piece_char = end_piece.getPieceAsChar()
+            self.add_killed_piece(end_piece_char)
+            self.remaining_pieces[end_piece_char] -= 1
+            self.increase_player_score(end_piece.getPieceValue())
+            has_piece_been_captured = True
+
+        if self.check_draw(has_piece_been_captured=has_piece_been_captured):
+            self.change_turn_player()
+            self.draw = True
+            print("Draw!!!!!!!")
+            return Status.DRAW
+
+        if opponent_king_pos:
+            self.checked_king_position = opponent_king_pos
+            self.set_king_in_check()
+            self.change_turn_player()
+            return Status.CHECK
+
+        self.change_turn_player()
+        return Status.OK
+
+    def bad_move(self):
+        self.prev_boards.pop()
+
     def make_move(self, start_pos, end_pos, promote_to=None):
         if self.checkmate:
             print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
+        if self.draw:
+            print("Game is over! It's a Draw!")
+            return Status.DRAW
         start_row, start_col = start_pos
         end_row, end_col = end_pos
 
@@ -404,22 +568,31 @@ class Board:
 
         board_as_chars = self.get_board_as_chars()
 
-        if end_pos in start_piece.getAllLegalMoves(pos=start_pos, board=board_as_chars):
-            # Check if King is in Check
-            # Find King position, then check if any enemy pieces are attacking it if the move has been made
+        if end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=board_as_chars):
             self.prev_boards.append(self.make_copy())
 
-            if end_piece is not None:
-                self.increase_player_score(end_piece.getPieceValue())
-                self.add_killed_piece(end_piece.getPieceAsChar(), end_pos)
+            if isinstance(start_piece, Pawn) and abs(start_row - end_row) == 2:  # Pawn Double Move
+                # Pawn can be en passant'd
+                if self.turn_player == WHITE:
+                    self.en_passant.append(((end_row + 1, end_col), self.half_turns + 1))
+                else:
+                    self.en_passant.append(((end_row - 1, end_col), self.half_turns + 1))
+
+            elif isinstance(start_piece, Pawn) and abs(start_col - end_col) == 1 and end_piece is None:  # En Passant
+                if (end_pos, self.half_turns) in self.en_passant:
+                    return self.move_en_passant(start_pos, end_pos, start_piece)
+                else:
+                    print("Not a Legal Move")
+                    self.bad_move()
+                    return Status.INVALID_REQUEST
 
             if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
-                return self.castle(start_piece, start_row, start_col, end_row, end_col)
+                return self.castle(start_pos, end_pos, start_piece, end_piece)
 
             if isinstance(start_piece, Pawn) and end_row in [0, 7]:
                 if promote_to is None:
                     print("Select Piece to promote Pawn to")
-                    self.prev_boards.pop()
+                    self.bad_move()
                     return Status.NEED_MORE_INFORMATION
                 promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
                 self.board[end_row][end_col] = copy.deepcopy(promoted_piece)
@@ -428,6 +601,7 @@ class Board:
             else:
                 self.board[end_row][end_col] = copy.deepcopy(start_piece)
                 self.board[start_row][start_col] = None
+
             board_as_chars = self.get_board_as_chars()
 
             # Check if making the move will put King in Check
@@ -437,7 +611,7 @@ class Board:
                 self.board[start_row][start_col] = copy.deepcopy(start_piece)
                 self.board[end_row][end_col] = copy.deepcopy(end_piece)
                 print("King is under attack!")
-                self.prev_boards.pop()
+                self.bad_move()
                 return Status.INVALID_REQUEST
             else:
                 self.remove_check()
@@ -449,13 +623,9 @@ class Board:
                     self.set_king_in_checkmate()
                     return Status.CHECKMATE
                 else:
-                    self.set_king_in_check()
+                    return self.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)
 
-            self.undone_boards = []
-            self.update_moved_pieces(start_pos)
-            self.change_turn_player()
-            self.increment_turns()
-            return Status.OK
+            return self.good_move(start_pos, end_piece)
 
         else:
             print("Not a Legal Move")

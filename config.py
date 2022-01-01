@@ -1,4 +1,4 @@
-BOARD_SIZE = 8
+BOARD_DIMENSIONS = 8
 STARTING_POSITION = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 BLACK = 1
 WHITE = 0
@@ -14,10 +14,13 @@ UNICODE_PIECE_SYMBOLS = {
     "K": "♔", "k": "♚",
     "P": "♙", "p": "♟",
 }
-DISPLAY_SIZE = 900
+DISPLAY_WIDTH = 1500
+DISPLAY_HEIGHT = 950
+BOARD_SIZE = 750
 X_MARGIN = 30
 Y_MARGIN = 30
 
+square_colors = [(255, 248, 220), (210, 170, 125)]
 PLAYER1 = "human"
 PLAYER2 = "human"
 SWITCH_VIEWING_PLAYER = False

@@ -7,3 +7,4 @@ class Status(Enum):
     INVALID_REQUEST = 2
     CHECKMATE = 3
     DRAW = 4
+    CHECK = 5

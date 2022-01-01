@@ -288,11 +288,28 @@ class Board:
         else:
             return self.can_black_king_castle
 
-    def can_castle(self, start_pos, end_pos, start_piece, end_piece):
+    def can_castle(self, start_pos, end_pos):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
         if not self.can_king_castle():
             print("This King can no longer Castle!")
+            return False
+
+        if self.turn_player == WHITE:
+            start_piece = "K"
+            if start_col > end_col:
+                end_piece = "Rl"
+            else:
+                end_piece = "Rr"
+        else:
+            start_piece = "k"
+            if start_col > end_col:
+                end_piece = "rl"
+            else:
+                end_piece = "rr"
+
+        if start_piece not in self.unmoved_pieces or end_piece not in self.unmoved_pieces:
+            print("Can't castle on this side!")
             return False
 
         if self.is_king_in_check():
@@ -307,7 +324,7 @@ class Board:
         if start_col > end_col:
             if self.is_piece_attacked((end_row, end_col + 1), board_as_chars):
                 print("Can't Castle, King will pass through check")
-            return False
+                return False
 
         else:
             if self.is_piece_attacked((end_row, end_col - 1), board_as_chars):
@@ -319,7 +336,7 @@ class Board:
     def castle(self, start_pos, end_pos, start_piece, end_piece):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
-        if self.can_castle(start_pos, end_pos, start_piece, end_piece):
+        if self.can_castle(start_pos, end_pos):
             self.board[end_row][end_col] = copy.deepcopy(start_piece)
             self.board[start_row][start_col] = None
             if start_col > end_col:
@@ -474,6 +491,11 @@ class Board:
             return self.is_stalemate()
 
     def get_all_legal_moves(self, start_pos):
+        """
+
+        :param start_pos: Start position of the piece to move
+        :return: All possible positions to be moved to
+        """
         start_row, start_col = start_pos
         all_moves = []
         start_piece = self.board[start_row][start_col]
@@ -491,7 +513,7 @@ class Board:
                     continue
 
             elif isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
-                if self.can_castle(start_pos, end_pos, start_piece, end_piece):
+                if self.can_castle(start_pos, end_pos):
                     all_moves.append(end_pos)
                     continue
 

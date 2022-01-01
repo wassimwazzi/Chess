@@ -22,6 +22,6 @@ Y_MARGIN = 30
 
 square_colors = [(255, 248, 220), (210, 170, 125)]
 PLAYER1 = "human"
-PLAYER2 = "human"
+PLAYER2 = "Random"
 VIEWING_PLAYER = WHITE
 SWITCH_VIEWING_PLAYER = False

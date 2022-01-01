@@ -133,7 +133,7 @@ def getPawnMoves(pos, pawn_color, board):
         Black_pieces, White_pieces)
     if pawn_color == WHITE:
         # White pawns move up the board.
-        if row == 6 and board[row - 2][col] is None:
+        if row == 6 and board[row - 2][col] is None and board[row - 1][col] is None:
             all_moves.append((row - 2, col))
         if board[row - 1][col] is None:
             all_moves.append((row - 1, col))
@@ -145,7 +145,7 @@ def getPawnMoves(pos, pawn_color, board):
 
     if pawn_color == BLACK:
         # Black pawns move down the board.
-        if row == 1 and board[row + 2][col] is None:
+        if row == 1 and board[row + 2][col] is None and board[row + 1][col] is None:
             all_moves.append((row + 2, col))
         if board[row + 1][col] is None:
             all_moves.append((row + 1, col))
@@ -185,14 +185,14 @@ def getEnPassantMoves(pos, piece_color, board):
     all_moves = []
     row, col = pos
     if piece_color == WHITE and row == 3:
-        if board[row][col - 1] == "p":
+        if col > 0 and board[row][col - 1] == "p":
             all_moves.append((row - 1, col - 1))
-        if board[row][col + 1] == "p":
+        if col < 7 and board[row][col + 1] == "p":
             all_moves.append((row - 1, col + 1))
     elif piece_color == BLACK and row == 5:
-        if board[row][col - 1] == "P":
+        if col > 0 and board[row][col - 1] == "P":
             all_moves.append((row + 1, col - 1))
-        if board[row][col + 1] == "P":
+        if col < 7 and board[row][col + 1] == "P":
             all_moves.append((row + 1, col + 1))
 
     return all_moves

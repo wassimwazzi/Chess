@@ -21,7 +21,7 @@ X_MARGIN = 30
 Y_MARGIN = 30
 
 square_colors = [(255, 248, 220), (210, 170, 125)]
-PLAYER1 = "random"
-PLAYER2 = "random"
-VIEWING_PLAYER = WHITE
+PLAYER1 = "3"
+PLAYER2 = "human"
+VIEWING_PLAYER = BLACK
 SWITCH_VIEWING_PLAYER = False

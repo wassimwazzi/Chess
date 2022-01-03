@@ -12,7 +12,7 @@ The Board is viewed in reverse. Index (0,0) of board represents the a8 square in
 
 class Board:
 
-    def __init__(self):
+    def __init__(self, verbose=False):
         self.en_passant = []
         self.prev_boards = []
         self.undone_boards = []
@@ -40,6 +40,12 @@ class Board:
             "Rook": Rook
         }
         self.checked_king_position = None
+        self.last_move = (None, None, None)  # start_pos, end_pos, promotion
+        self.verbose = verbose
+
+    def print(self, line):
+        if self.verbose:
+            print(line)
 
     def copy_from(self, target):
         for key in target:
@@ -203,8 +209,19 @@ class Board:
     def get_turn_player(self):
         return self.turn_player
 
+    def get_remaining_pieces(self):
+        remaining_pieces = []
+        for row in self.board:
+            for piece in row:
+                if piece is not None:
+                    remaining_pieces.append(piece.getPieceAsChar())
+        return remaining_pieces
+
     def change_turn_player(self):
         self.turn_player = 1 - self.turn_player
+
+    def is_game_over(self):
+        return self.draw or self.checkmate
 
     def go_back_a_move(self):
         if len(self.prev_boards) == 0:
@@ -256,7 +273,7 @@ class Board:
             return result
 
     def set_king_in_check(self):
-        print("Check!")
+        self.print("Check!")
         if self.turn_player == WHITE:
             self.black_king_checked = True
         else:
@@ -292,7 +309,7 @@ class Board:
         start_row, start_col = start_pos
         end_row, end_col = end_pos
         if not self.can_king_castle():
-            print("This King can no longer Castle!")
+            self.print("This King can no longer Castle!")
             return False
 
         if self.turn_player == WHITE:
@@ -309,26 +326,26 @@ class Board:
                 end_piece = "rr"
 
         if start_piece not in self.unmoved_pieces or end_piece not in self.unmoved_pieces:
-            print("Can't castle on this side!")
+            self.print("Can't castle on this side!")
             return False
 
         if self.is_king_in_check():
-            print("Can't Castle while in Check!")
+            self.print("Can't Castle while in Check!")
             return False
 
         board_as_chars = self.get_board_as_chars()
         if self.is_piece_attacked((end_row, end_col), board_as_chars):
-            print("Can't Castle, King will be in check")
+            self.print("Can't Castle, King will be in check")
             return False
 
         if start_col > end_col:
             if self.is_piece_attacked((end_row, end_col + 1), board_as_chars):
-                print("Can't Castle, King will pass through check")
+                self.print("Can't Castle, King will pass through check")
                 return False
 
         else:
             if self.is_piece_attacked((end_row, end_col - 1), board_as_chars):
-                print("Can't Castle, King will pass through check")
+                self.print("Can't Castle, King will pass through check")
                 return False
 
         return True
@@ -336,21 +353,21 @@ class Board:
     def castle(self, start_pos, end_pos, start_piece, end_piece):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
-        if self.can_castle(start_pos, end_pos):
-            print("Castling")
-            self.board[end_row][end_col] = copy.deepcopy(start_piece)
-            self.board[start_row][start_col] = None
-            if start_col > end_col:
-                self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
-                self.board[end_row][end_col - 2] = None
-            else:
-                self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
-                self.board[end_row][end_col + 1] = None
-            self.good_move(start_pos, end_piece, castled=True)
-            return Status.OK
+        # if self.can_castle(start_pos, end_pos):
+        self.print("Castling")
+        self.board[end_row][end_col] = copy.deepcopy(start_piece)
+        self.board[start_row][start_col] = None
+        if start_col > end_col:
+            self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
+            self.board[end_row][end_col - 2] = None
         else:
-            self.bad_move()
-            return Status.INVALID_REQUEST
+            self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
+            self.board[end_row][end_col + 1] = None
+        self.good_move(start_pos, end_piece, castled=True)
+        #     return Status.OK
+        # else:
+        #     self.bad_move()
+        #     return Status.INVALID_REQUEST
 
     def update_moved_pieces(self, pos):
         if not self.unmoved_pieces:
@@ -396,7 +413,7 @@ class Board:
         return True
 
     def set_king_in_checkmate(self, checkmated_king_pos):
-        print("Checkmate!!!!!")
+        self.print("Checkmate!!!!!")
         self.checkmate = True
         self.winner = self.turn_player
         self.checked_king_position = checkmated_king_pos
@@ -422,7 +439,7 @@ class Board:
                 self.board[start_row][start_col] = start_piece
                 self.board[end_row + 1][end_col] = killed_piece
                 self.remaining_pieces["p"] += 1
-                print("King will be in Check!")
+                self.print("King will be in Check!")
                 if not undo_move:
                     self.bad_move()
                 return Status.INVALID_REQUEST
@@ -437,7 +454,7 @@ class Board:
                 self.board[start_row][start_col] = start_piece
                 self.board[end_row - 1][end_col] = killed_piece
                 self.remaining_pieces["P"] += 1
-                print("King will be in Check!")
+                self.print("King will be in Check!")
                 if not undo_move:
                     self.bad_move()
                 return Status.INVALID_REQUEST
@@ -468,18 +485,31 @@ class Board:
         return True
 
     def is_draw_by_insufficient_material(self):
-        sufficient_material = [["K", "N", "B"], ["K", "R"], ["K", "Q"], ["K", "P"]] # , ["K", "B", "B"] Have to be of opposing color
+        sufficient_material = [["K", "N", "B"], ["K", "R"], ["K", "Q"],
+                               ["K", "P"]]  # , ["K", "B", "B"] Have to be of opposing color
+        remaining_pieces = self.get_remaining_pieces()
         for list in sufficient_material:
             result_white = 1
             result_black = 1
             for piece in list:
-                if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) <= 0:
+                if piece not in remaining_pieces:
                     result_white = 0
-                if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) <= 0:
+                if piece.lower() not in remaining_pieces:
                     result_black = 0
             if result_white or result_black:
                 return False
         return True
+        # for list in sufficient_material:
+        #     result_white = 1
+        #     result_black = 1
+        #     for piece in list:
+        #         if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) <= 0:
+        #             result_white = 0
+        #         if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) <= 0:
+        #             result_black = 0
+        #     if result_white or result_black:
+        #         return False
+        # return True
 
     def is_draw_by_repetition(self):
         raise NotImplemented
@@ -494,6 +524,8 @@ class Board:
         :param start_pos: Start position of the piece to move
         :return: All possible positions to be moved to
         """
+        if self.is_game_over():
+            return []
         start_row, start_col = start_pos
         all_moves = []
         start_piece = self.board[start_row][start_col]
@@ -554,15 +586,14 @@ class Board:
             self.increase_player_score(end_piece.getPieceValue())
             has_piece_been_captured = True
             if isinstance(end_piece, King):
-                print("Something went wrong? King was captured!")
-                print("Here is the board after capture: {}".format(self.get_board_as_chars()))
-                print("Start position: {}".format(start_pos))
+                self.print("Something went wrong? King was captured!")
+                self.print("Here is the board after capture: {}".format(self.get_board_as_chars()))
+                self.print("Start position: {}".format(start_pos))
                 return Status.INVALID_REQUEST
 
         if self.check_draw(has_piece_been_captured=has_piece_been_captured):
-            self.change_turn_player()
             self.draw = True
-            print("Draw!!!!!!!")
+            self.print("Draw!!!!!!!")
             return Status.DRAW
 
         if opponent_king_pos:
@@ -578,12 +609,13 @@ class Board:
         self.prev_boards.pop()
 
     def make_move(self, start_pos, end_pos, promote_to=None):
-        print("Received make move request: start pos {}, end pos {}, promote_to {}".format(start_pos, end_pos, promote_to))
+        self.print("Received make move request: start pos {}, end pos {}, promote_to {}".format(start_pos, end_pos,
+                                                                                           promote_to))
         if self.checkmate:
-            print("Game is over! {} won!".format(self.winner))
+            self.print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
         if self.draw:
-            print("Game is over! It's a Draw!")
+            self.print("Game is over! It's a Draw!")
             return Status.DRAW
         start_row, start_col = start_pos
         end_row, end_col = end_pos
@@ -591,21 +623,21 @@ class Board:
         start_piece = self.board[start_row][start_col]
         end_piece = self.board[end_row][end_col]
 
-        print("Start piece: {}, End piece: {}".format(start_piece, end_piece))
+        self.print("Start piece: {}, End piece: {}".format(start_piece, end_piece))
 
         if start_piece is None:
-            print("No start piece chosen")
+            self.print("No start piece chosen")
             return Status.INVALID_REQUEST
 
         if start_piece.getPieceColor() != self.turn_player:
-            print("Wrong Player!")
+            self.print("Wrong Player!")
             return Status.INVALID_REQUEST
 
-        board_as_chars = self.get_board_as_chars()
+        # board_as_chars = self.get_board_as_chars()
 
-        if end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=board_as_chars):
+        if end_pos in self.get_all_legal_moves(start_pos):
             self.prev_boards.append(self.make_copy())
-            promoted_piece=None
+            promoted_piece = None
 
             if isinstance(start_piece, Pawn) and abs(start_row - end_row) == 2:  # Pawn Double Move
                 # Pawn can be en passant'd
@@ -618,7 +650,7 @@ class Board:
                 if (end_pos, self.half_turns) in self.en_passant:
                     return self.move_en_passant(start_pos, end_pos, start_piece)
                 else:
-                    print("Not a Legal Move")
+                    self.print("Not a Legal Move")
                     self.bad_move()
                     return Status.INVALID_REQUEST
 
@@ -627,7 +659,7 @@ class Board:
 
             if isinstance(start_piece, Pawn) and end_row in [0, 7]:
                 if promote_to is None:
-                    print("Select Piece to promote Pawn to")
+                    self.print("Select Piece to promote Pawn to")
                     self.bad_move()
                     return Status.NEED_MORE_INFORMATION
                 promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
@@ -640,17 +672,17 @@ class Board:
 
             board_as_chars = self.get_board_as_chars()
 
-            # Check if making the move will put King in Check
-            turn_player_king_pos = self.get_king_pos(self.turn_player)
-            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
-                # undo move
-                self.board[start_row][start_col] = copy.deepcopy(start_piece)
-                self.board[end_row][end_col] = copy.deepcopy(end_piece)
-                print("King is under attack!")
-                self.bad_move()
-                return Status.INVALID_REQUEST
-            else:
-                self.remove_check()
+            # # Check if making the move will put King in Check
+            # turn_player_king_pos = self.get_king_pos(self.turn_player)
+            # if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+            #     # undo move
+            #     self.board[start_row][start_col] = copy.deepcopy(start_piece)
+            #     self.board[end_row][end_col] = copy.deepcopy(end_piece)
+            #     self.print("King is under attack!")
+            #     self.bad_move()
+            #     return Status.INVALID_REQUEST
+            # else:
+            #     self.remove_check()
 
             # Check if Opposing King is in Check
             opponent_king_pos = self.get_king_pos(1 - self.turn_player)
@@ -664,5 +696,88 @@ class Board:
             return self.good_move(start_pos, end_piece, promoted_piece=promoted_piece)
 
         else:
-            print("Not a Legal Move")
+            self.print("Not a Legal Move")
             return Status.INVALID_REQUEST
+
+    def get_all_next_boards(self):
+        all_boards = []
+        for start_row, row in enumerate(self.board):
+            for start_col, start_piece in enumerate(row):
+                if start_piece is not None and start_piece.getPieceColor() == self.turn_player:
+
+                    for end_row, end_col in self.get_all_legal_moves((start_row, start_col)):
+                        start_pos = (start_row, start_col)
+                        end_pos = (end_row, end_col)
+                        promoted_piece = None
+                        end_piece = self.board[end_row][end_col]
+                        if isinstance(start_piece, Pawn) and abs(
+                                start_col - end_col) == 1 and end_piece is None:  # En Passant
+                            new_board = Board()
+                            new_board.copy_from(self.make_copy())
+                            new_board.move_en_passant(start_pos, end_pos, start_piece)
+                            new_board.last_move = (start_pos, end_pos, None)
+                            all_boards.append(new_board)
+                            continue
+
+                        if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
+                            new_board = Board()
+                            new_board.copy_from(self.make_copy())
+                            new_board.castle(start_pos, end_pos, start_piece, end_piece)
+                            new_board.last_move = (start_pos, end_pos, None)
+                            all_boards.append(new_board)
+                            continue
+
+                        if isinstance(start_piece, Pawn) and end_row in [0, 7]: # Promote Pawn
+                            for promote_to in ["Bishop", "Knight", "Queen", "Rook"]:
+                                new_board = Board()
+                                new_board.copy_from(self.make_copy())
+                                promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
+                                new_board.board[end_row][end_col] = copy.deepcopy(promoted_piece)
+                                new_board.board[start_row][start_col] = None
+
+                                board_as_chars = new_board.get_board_as_chars()
+                                # Check if Opposing King is in Check
+                                opponent_king_pos = new_board.get_king_pos(1 - self.turn_player)
+                                if new_board.is_piece_attacked(opponent_king_pos, board_as_chars,
+                                                               attacking_color=self.turn_player):
+                                    if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
+                                        new_board.set_king_in_checkmate(opponent_king_pos)
+                                        new_board.last_move = (start_pos, end_pos, promote_to)
+                                        all_boards.append(new_board)
+                                    else:
+                                        new_board.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)
+                                        new_board.last_move = (start_pos, end_pos, promote_to)
+                                        all_boards.append(new_board)
+                                else:
+                                    new_board.good_move(start_pos, end_piece, promoted_piece=promoted_piece)
+                                    new_board.last_move = (start_pos, end_pos, promote_to)
+                                    all_boards.append(new_board)
+                            continue
+
+                        else:
+                            new_board = Board()
+                            new_board.copy_from(self.make_copy())
+                            new_board.board[end_row][end_col] = copy.deepcopy(start_piece)
+                            new_board.board[start_row][start_col] = None
+
+                            board_as_chars = new_board.get_board_as_chars()
+
+                            # Check if Opposing King is in Check
+                            opponent_king_pos = new_board.get_king_pos(1 - self.turn_player)
+                            if new_board.is_piece_attacked(opponent_king_pos, board_as_chars,
+                                                           attacking_color=self.turn_player):
+                                if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
+                                    new_board.set_king_in_checkmate(opponent_king_pos)
+                                    new_board.last_move = (start_pos, end_pos, None)
+                                    all_boards.append(new_board)
+                                else:
+                                    new_board.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)
+                                    new_board.last_move = (start_pos, end_pos, None)
+                                    all_boards.append(new_board)
+
+                            else:
+                                new_board.good_move(start_pos, end_piece)
+                                new_board.last_move = (start_pos, end_pos, None)
+                                all_boards.append(new_board)
+
+        return all_boards

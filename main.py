@@ -1,7 +1,7 @@
 import sys
 
 import pygame as p
-
+from threading import Thread
 from Bot import Bot
 from Status import Status
 from Board import Board
@@ -155,16 +155,16 @@ class Engine:
 
     def game_handler(self):
         while True:
-            for event in p.event.get():
-                if event.type == p.QUIT:
-                    p.quit()
-                    sys.exit()
             if self.is_game_over:
                 return self.game_over()
             elif self.is_turn_player_human():
                 self.make_human_move()
             else:
                 self.make_cpu_move()
+            for event in p.event.get():
+                if event.type == p.QUIT:
+                    p.quit()
+                    sys.exit()
             p.display.update()
 
     def make_human_move(self):
@@ -371,6 +371,23 @@ class Engine:
                         self.DISPLAYSURF.fill(SURFACE_COLOR)
                         p.display.update()
                         return True
+                elif event.type == p.KEYDOWN:
+                    if event.key == p.K_LEFT:
+                        print("GO BACK TO PREV BOARD STATE")
+                        if self.board.go_back_a_move() == Status.OK:
+                            self.update_board_and_players()
+                            if self.board.checked_king_position:
+                                self.highlightSquare(self.get_viewed_pos(self.board.checked_king_position),
+                                                     color=self.check_color)
+
+                    elif event.key == p.K_RIGHT:
+                        print("UNDO GOING BACK TO PREV BOARD STATE")
+                        if self.board.undo_going_back() == Status.OK:
+                            self.update_board_and_players()
+                            if self.board.checked_king_position:
+                                self.highlightSquare(self.get_viewed_pos(self.board.checked_king_position),
+                                                     color=self.check_color)
+            p.display.update()
 
 
 if __name__ == '__main__':

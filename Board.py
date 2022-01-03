@@ -355,16 +355,16 @@ class Board:
         end_row, end_col = end_pos
         # if self.can_castle(start_pos, end_pos):
         self.print("Castling")
-        self.board[end_row][end_col] = copy.deepcopy(start_piece)
+        self.board[end_row][end_col] = start_piece
         self.board[start_row][start_col] = None
         if start_col > end_col:
-            self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
+            self.board[end_row][end_col + 1] = self.board[end_row][end_col - 2]
             self.board[end_row][end_col - 2] = None
         else:
-            self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
+            self.board[end_row][end_col - 1] = self.board[end_row][end_col + 1]
             self.board[end_row][end_col + 1] = None
         self.good_move(start_pos, end_piece, castled=True)
-        #     return Status.OK
+        return Status.OK
         # else:
         #     self.bad_move()
         #     return Status.INVALID_REQUEST
@@ -547,7 +547,7 @@ class Board:
                     all_moves.append(end_pos)
                 continue
 
-            self.board[end_row][end_col] = copy.deepcopy(start_piece)
+            self.board[end_row][end_col] = start_piece
             self.board[start_row][start_col] = None
 
             board_as_chars = self.get_board_as_chars()
@@ -558,8 +558,8 @@ class Board:
                 all_moves.append(end_pos)
 
             # undo move
-            self.board[start_row][start_col] = copy.deepcopy(start_piece)
-            self.board[end_row][end_col] = copy.deepcopy(end_piece)
+            self.board[start_row][start_col] = start_piece
+            self.board[end_row][end_col] = end_piece
         return all_moves
 
     def good_move(self, start_pos, end_piece, castled=False, opponent_king_pos=None, promoted_piece=None):
@@ -663,11 +663,11 @@ class Board:
                     self.bad_move()
                     return Status.NEED_MORE_INFORMATION
                 promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
-                self.board[end_row][end_col] = copy.deepcopy(promoted_piece)
+                self.board[end_row][end_col] = promoted_piece
                 self.board[start_row][start_col] = None
 
             else:
-                self.board[end_row][end_col] = copy.deepcopy(start_piece)
+                self.board[end_row][end_col] = start_piece
                 self.board[start_row][start_col] = None
 
             board_as_chars = self.get_board_as_chars()
@@ -732,7 +732,7 @@ class Board:
                                 new_board = Board()
                                 new_board.copy_from(self.make_copy())
                                 promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
-                                new_board.board[end_row][end_col] = copy.deepcopy(promoted_piece)
+                                new_board.board[end_row][end_col] = promoted_piece
                                 new_board.board[start_row][start_col] = None
 
                                 board_as_chars = new_board.get_board_as_chars()
@@ -757,7 +757,7 @@ class Board:
                         else:
                             new_board = Board()
                             new_board.copy_from(self.make_copy())
-                            new_board.board[end_row][end_col] = copy.deepcopy(start_piece)
+                            new_board.board[end_row][end_col] = start_piece
                             new_board.board[start_row][start_col] = None
 
                             board_as_chars = new_board.get_board_as_chars()

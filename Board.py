@@ -337,6 +337,7 @@ class Board:
         start_row, start_col = start_pos
         end_row, end_col = end_pos
         if self.can_castle(start_pos, end_pos):
+            print("Castling")
             self.board[end_row][end_col] = copy.deepcopy(start_piece)
             self.board[start_row][start_col] = None
             if start_col > end_col:
@@ -345,7 +346,7 @@ class Board:
             else:
                 self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
                 self.board[end_row][end_col + 1] = None
-                self.good_move(start_pos, end_piece, castled=True)
+            self.good_move(start_pos, end_piece, castled=True)
             return Status.OK
         else:
             self.bad_move()
@@ -467,14 +468,14 @@ class Board:
         return True
 
     def is_draw_by_insufficient_material(self):
-        sufficient_material = [["K", "N", "B"], ["K", "B", "B"], ["K", "R"], ["K", "Q"], ["K", "P"]]
+        sufficient_material = [["K", "N", "B"], ["K", "R"], ["K", "Q"], ["K", "P"]] # , ["K", "B", "B"] Have to be of opposing color
         for list in sufficient_material:
             result_white = 1
             result_black = 1
             for piece in list:
-                if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) == 0:
+                if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) <= 0:
                     result_white = 0
-                if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) == 0:
+                if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) <= 0:
                     result_black = 0
             if result_white or result_black:
                 return False
@@ -485,10 +486,7 @@ class Board:
 
     def check_draw(self, has_piece_been_captured):
         # To add draw by repetition
-        if has_piece_been_captured:
-            return self.is_stalemate() and self.is_draw_by_insufficient_material()
-        else:
-            return self.is_stalemate()
+        return self.is_stalemate() or self.is_draw_by_insufficient_material()
 
     def get_all_legal_moves(self, start_pos):
         """
@@ -515,7 +513,7 @@ class Board:
             elif isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
                 if self.can_castle(start_pos, end_pos):
                     all_moves.append(end_pos)
-                    continue
+                continue
 
             self.board[end_row][end_col] = copy.deepcopy(start_piece)
             self.board[start_row][start_col] = None
@@ -532,7 +530,7 @@ class Board:
             self.board[end_row][end_col] = copy.deepcopy(end_piece)
         return all_moves
 
-    def good_move(self, start_pos, end_piece, castled=False, opponent_king_pos=None):
+    def good_move(self, start_pos, end_piece, castled=False, opponent_king_pos=None, promoted_piece=None):
         self.update_moved_pieces(start_pos)
         self.increment_turns()
         self.undone_boards = []
@@ -541,12 +539,25 @@ class Board:
         if castled:
             self.remove_castling_rights()
 
+        if promoted_piece:
+            promoted_piece_char = promoted_piece.getPieceAsChar()
+            self.remaining_pieces[promoted_piece_char] += 1
+            if self.turn_player == WHITE:
+                self.remaining_pieces["P"] -= 1
+            else:
+                self.remaining_pieces["p"] -= 1
+
         if end_piece:
             end_piece_char = end_piece.getPieceAsChar()
             self.add_killed_piece(end_piece_char)
             self.remaining_pieces[end_piece_char] -= 1
             self.increase_player_score(end_piece.getPieceValue())
             has_piece_been_captured = True
+            if isinstance(end_piece, King):
+                print("Something went wrong? King was captured!")
+                print("Here is the board after capture: {}".format(self.get_board_as_chars()))
+                print("Start position: {}".format(start_pos))
+                return Status.INVALID_REQUEST
 
         if self.check_draw(has_piece_been_captured=has_piece_been_captured):
             self.change_turn_player()
@@ -567,6 +578,7 @@ class Board:
         self.prev_boards.pop()
 
     def make_move(self, start_pos, end_pos, promote_to=None):
+        print("Received make move request: start pos {}, end pos {}, promote_to {}".format(start_pos, end_pos, promote_to))
         if self.checkmate:
             print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
@@ -593,6 +605,7 @@ class Board:
 
         if end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=board_as_chars):
             self.prev_boards.append(self.make_copy())
+            promoted_piece=None
 
             if isinstance(start_piece, Pawn) and abs(start_row - end_row) == 2:  # Pawn Double Move
                 # Pawn can be en passant'd
@@ -648,7 +661,7 @@ class Board:
                 else:
                     return self.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)
 
-            return self.good_move(start_pos, end_piece)
+            return self.good_move(start_pos, end_piece, promoted_piece=promoted_piece)
 
         else:
             print("Not a Legal Move")

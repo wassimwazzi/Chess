@@ -5,12 +5,12 @@ from Piece import Pawn
 from config import WHITE, BLACK
 
 white_pawn_values = [[0, 0, 0, 0, 0, 0, 0, 0],
-                     [50, 50, 50, 50, 50, 50, 50, 50],
-                     [10, 10, 20, 30, 30, 20, 10, 10],
-                     [2, 2, 3, 6, 6, 3, 2, 2],
-                     [0, 0, 0, 5, 5, 0, 0, 0],
-                     [1, 0, -2, 0, 0, -2, 0, 1],
-                     [1, 0, 0, -5, -5, 0, 0, 1],
+                     [17, 20, 20, 20, 20, 20, 20, 20],
+                     [10, 10, 13, 13, 13, 13, 10, 10],
+                     [2, 2, 3, 5, 5, 3, 2, 2],
+                     [0, 0, 0, 1, 1, 0, 0, 0],
+                     [1, 0, -1, 1, 1, -1, 0, 1],
+                     [1, 0, 0, -1, -1, 0, 0, 1],
                      [0, 0, 0, 0, 0, 0, 0, 0]]
 black_pawn_values = list(reversed(white_pawn_values))
 
@@ -21,7 +21,7 @@ white_knight_values = [[-4, -3, -2, -2, -2, -2, -3, -4],
                        [-1, 0, 4, 5, 5, 4, 0, -1],
                        [-1, 2, 3, 4, 4, 3, 2, -1],
                        [0, -1, 2, 1, 1, 2, -1, 0],
-                       [-5, -4, -3, -3, -3, -3, -4, -5]]
+                       [-5, -3, -3, -3, -3, -3, -3, -5]]
 black_knight_values = list(reversed(white_knight_values))
 
 white_bishop_values = [[-3, -2, -2, -2, -2, -2, -2, -3],
@@ -147,13 +147,17 @@ class Bot:
             max = True
         else:
             max = False
-        return self.minimax(board, depth, float('-inf'), float('inf'), max)[0].last_move
+        board, eval, visited_nodes =  self.minimax(board, depth, float('-inf'), float('inf'), max)
+        print("Visited {} nodes, best eval = {}".format(visited_nodes, eval))
+        return board.last_move
 
-    def eval(self, board):
+    def evaluate(self, board):
         if board.draw:
             return 0
 
         if board.checkmate:
+            if board.winner == self.color:
+                print("winning move found")
             if board.winner == WHITE:
                 return float('inf')
             else:
@@ -182,40 +186,49 @@ class Bot:
             for j, piece in enumerate(row):
                 if piece is None:
                     continue
-                multiplier = 1 if piece.getPieceColor == WHITE else -1
+                multiplier = 1 if piece.getPieceColor() == WHITE else -1
                 score += multiplier * eval_scores[piece.getPieceAsChar()][i][j]
 
         return score
 
-    def minimax(self, board, depth, alpha, beta, maximizingPlayer):
+    def minimax(self, board, depth, alpha, beta, maximizingPlayer, visited_nodes=0):
         if depth == 0 or board.is_game_over():
-            return board, self.eval(board)
+            return board, self.evaluate(board), visited_nodes
 
         board_children = board.get_all_next_boards()
+        visited_nodes += len(board_children)
         child_index = 0
         if maximizingPlayer:
             maxEval = float('-inf')
             for i, board_child in enumerate(board_children):
-                board, eval = self.minimax(board_child, depth - 1, alpha, beta, False)
+                board, eval, visited_nodes = self.minimax(board_child, depth - 1, alpha, beta, False, visited_nodes)
                 if eval > maxEval:
                     maxEval = eval
                     child_index = i
+                elif eval == maxEval:  # select new move 1/2 of the times if tie
+                    if random.uniform(0, 1) > 0.5:
+                        maxEval = eval
+                        child_index = i
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
-            return board_children[child_index], maxEval
+            return board_children[child_index], maxEval, visited_nodes
 
         else:
             minEval = float('inf')
             for i, board_child in enumerate(board_children):
-                board, eval = self.minimax(board_child, depth - 1, alpha, beta, True)
+                board, eval, visited_nodes = self.minimax(board_child, depth - 1, alpha, beta, True, visited_nodes)
                 if eval < minEval:
                     minEval = eval
                     child_index = i
+                elif eval == minEval:  # select new move 1/2 of the times if tie
+                    if random.uniform(0, 1) > 0.5:
+                        maxEval = eval
+                        child_index = i
                 beta = min(beta, eval)
                 if beta <= alpha:
                     break
-            return board_children[child_index], minEval
+            return board_children[child_index], minEval, visited_nodes
 
 
 class Tree:

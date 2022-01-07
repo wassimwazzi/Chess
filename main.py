@@ -331,6 +331,9 @@ class Engine:
     def drawBoardAndPieces(self):
         self.drawBoard()  # draw squares on the board
         self.drawPieces()  # draw pieces on top of those squares
+        if self.board.is_king_in_check():
+            king_pos = self.get_viewed_pos(self.board.get_checked_king_position())
+            self.highlightSquare(king_pos, color=self.check_color)
 
     def get_viewed_pos(self, pos):
         if self.viewing_player == BLACK:
@@ -391,12 +394,12 @@ class Engine:
 
 
 if __name__ == '__main__':
-    engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board())
+    engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board(verbose=True))
     viewing_player = VIEWING_PLAYER
     while True:
         if engine.start_game(player1=PLAYER1, player2=PLAYER2, viewing_player=viewing_player,
                              switch_viewing_player=SWITCH_VIEWING_PLAYER):
-            engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board())
+            engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board(verbose=True))
             viewing_player = VIEWING_PLAYER
             engine.start_game(player1=PLAYER1, player2=PLAYER2, viewing_player=viewing_player,
                               switch_viewing_player=SWITCH_VIEWING_PLAYER)

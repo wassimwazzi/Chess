@@ -25,7 +25,7 @@ class Bot:
             time.sleep(1)
             return self.random_move(board)
         else:
-            #time.sleep(1)
+            # time.sleep(1)
             return self.mini_max_move(board, int(self.level))
 
     def random_move(self, board):
@@ -46,9 +46,9 @@ class Bot:
 
     def mini_max_move(self, board, depth):
         if self.color == WHITE:
-            max=True
+            max = True
         else:
-            max=False
+            max = False
         return self.minimax(board, depth, float('-inf'), float('inf'), max)[0].last_move
 
     def eval(self, board):
@@ -71,13 +71,28 @@ class Bot:
         #         score -= num*self.piece_values[key.upper()]
         # return score
 
-        pieces = board.get_remaining_pieces()
         score = 0
-        for piece in pieces:
-            if piece.isupper():
-                score += self.piece_values[piece]
-            elif piece.islower():
-                score -= self.piece_values[piece.upper()]
+        board_chars = board.get_board_as_chars()
+        for i, row in enumerate(board.board):
+            for j, piece in enumerate(row):
+                # if (i, j) in [(3, 3), (4, 4), (3, 4), (4, 3)]:  # center control
+                #     white_attackers_on_square, black_attackers_on_square = board.get_number_of_attackers_on_square_by_color(
+                #         (i, j), x_ray=True)
+                #     score += white_attackers_on_square
+                #     score -= black_attackers_on_square
+                if piece is None:
+                    continue
+                if piece.getPieceColor() == WHITE:
+                    multiplier = 1
+                else:
+                    multiplier = -1
+                score += multiplier * (
+                        piece.getEvalValue() + len(piece.getAllPseudoLegalMoves(pos=(i, j), board=board_chars)))
+                # white_attackers_on_square, black_attackers_on_square = board.get_number_of_attackers_on_square_by_color(
+                #     (i, j), x_ray=True)
+                # score += white_attackers_on_square
+                # score -= black_attackers_on_square
+
         return score
 
     def minimax(self, board, depth, alpha, beta, maximizingPlayer):
@@ -116,6 +131,7 @@ class Tree:
         self.parent = parent
         self.children = children
         self.node = node
+
 
 class Node:
     def __init__(self, board, score):

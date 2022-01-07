@@ -30,6 +30,7 @@ class Board:
         self.can_black_king_castle = 2
         self.unmoved_pieces = ["K", "Rl", "Rr", "k", "rl", "rr"]
         self.board = self.create_board()
+        self.total_n_pieces = self.get_n_pieces()  # needs to be after create_board()
         self.checkmate = False
         self.draw = False
         self.winner = None
@@ -43,6 +44,10 @@ class Board:
         self.last_move = (None, None, None)  # start_pos, end_pos, promotion
         self.verbose = verbose
         self.repetition_deque = deque([], maxlen=6)
+        self.white_castled = False
+        self.black_castled = False
+        self.has_piece_been_captured = False
+        self.total_piece_values = 0
 
     def print(self, line):
         if self.verbose:
@@ -54,7 +59,7 @@ class Board:
 
     def make_copy(self):
         x = {
-            "board": self.board,
+            "board": copy.deepcopy(self.board),
             "white_king_checked": self.white_king_checked,
             "black_king_checked": self.black_king_checked,
             "can_white_king_castle": self.can_white_king_castle,
@@ -69,9 +74,21 @@ class Board:
             "killed_white_pieces": self.killed_white_pieces,
             "killed_black_pieces": self.killed_black_pieces,
             "checked_king_position": self.checked_king_position,
-            "repetition_deque": self.repetition_deque
+            "repetition_deque": copy.deepcopy(self.repetition_deque),
+            "white_castled": self.white_castled,
+            "black_castled": self.black_castled,
+            "has_piece_ben_captured": self.has_piece_been_captured,
+            "total_piece_values": self.total_piece_values,
+            "total_n_pieces": self.total_n_pieces
         }
-        return copy.deepcopy(x)
+        # return copy.deepcopy(x)
+        return x
+
+    def get_n_pieces(self):
+        total = 0
+        for v in self.remaining_pieces.values():
+            total += v
+        return total
 
     def fill_board_row(self, row, board, row_index):
         col_index_increment = 0
@@ -240,6 +257,18 @@ class Board:
 
     def is_game_over(self):
         return self.draw or self.checkmate
+
+    def is_endgame(self):
+        if self.total_n_pieces > 12:
+            return False
+        else:
+            return True
+
+    def has_castled(self, color):
+        if color == WHITE:
+            return self.white_castled
+        elif color == BLACK:
+            return self.black_castled
 
     def go_back_a_move(self):
         if len(self.prev_boards) == 0:
@@ -979,9 +1008,9 @@ class Board:
         else:
             return False
 
-    def check_draw(self, start_pos, end_pos, start_piece, end_piece, has_piece_been_captured):
+    def check_draw(self, start_pos, end_pos, start_piece, end_piece):
         # To add draw by repetition
-        if has_piece_been_captured:
+        if self.has_piece_been_captured:
             return self.is_stalemate() or self.is_draw_by_repetition(start_pos, end_pos, start_piece,
                                                                      end_piece) or self.is_draw_by_insufficient_material()
         else:
@@ -1043,10 +1072,14 @@ class Board:
         self.increment_turns()
         self.add_to_deque(board_chars)
         self.undone_boards = []
-        has_piece_been_captured = False
 
         if castled:
             self.remove_castling_rights()
+
+            if self.turn_player == WHITE:
+                self.white_castled = True
+            else:
+                self.black_castled = True
 
         if promoted_piece:
             promoted_piece_char = promoted_piece.getPieceAsChar()
@@ -1060,15 +1093,21 @@ class Board:
             end_piece_char = end_piece.getPieceAsChar()
             self.add_killed_piece(end_piece_char)
             self.remaining_pieces[end_piece_char] -= 1
-            self.increase_player_score(end_piece.getPieceValue())
-            has_piece_been_captured = True
+            self.total_n_pieces -= 1
+            self.total_piece_values -= end_piece.getEvalValue()
+            # self.increase_player_score(end_piece.getPieceValue())
+            # future idea: https://www.chessprogramming.org/Simplified_Evaluation_Function, doesn't really work
+            # create a helper function that takes the end_piece, and position, and calculates the score of the piece based on the position ( as in the website )
+            self.has_piece_been_captured = True
             if isinstance(end_piece, King):
                 self.print("Something went wrong? King was captured!")
                 self.print("Here is the board after capture: {}".format(self.get_board_as_chars()))
                 self.print("Start position: {}".format(start_pos))
                 return Status.INVALID_REQUEST
+        else:
+            self.has_piece_been_captured = False
 
-        if self.check_draw(start_pos, end_pos, start_piece, end_piece, has_piece_been_captured=has_piece_been_captured):
+        if self.check_draw(start_pos, end_pos, start_piece, end_piece):
             self.draw = True
             self.print("Draw!!!!!!!")
             return Status.DRAW
@@ -1185,7 +1224,7 @@ class Board:
                             new_board.copy_from(self.make_copy())
                             new_board.move_en_passant(start_pos, end_pos, start_piece)
                             new_board.last_move = (start_pos, end_pos, None)
-                            all_boards.append(new_board)
+                            all_boards.insert(0, new_board)
                             continue
 
                         if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
@@ -1193,7 +1232,7 @@ class Board:
                             new_board.copy_from(self.make_copy())
                             new_board.castle(start_pos, end_pos, start_piece, end_piece)
                             new_board.last_move = (start_pos, end_pos, None)
-                            all_boards.append(new_board)
+                            all_boards.insert(0, new_board)
                             continue
 
                         if isinstance(start_piece, Pawn) and end_row in [0, 7]:  # Promote Pawn

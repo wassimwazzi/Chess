@@ -4,6 +4,76 @@ import time
 from Piece import Pawn
 from config import WHITE, BLACK
 
+white_pawn_values = [[0, 0, 0, 0, 0, 0, 0, 0],
+                     [50, 50, 50, 50, 50, 50, 50, 50],
+                     [10, 10, 20, 30, 30, 20, 10, 10],
+                     [2, 2, 3, 6, 6, 3, 2, 2],
+                     [0, 0, 0, 5, 5, 0, 0, 0],
+                     [1, 0, -2, 0, 0, -2, 0, 1],
+                     [1, 0, 0, -5, -5, 0, 0, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0]]
+black_pawn_values = list(reversed(white_pawn_values))
+
+white_knight_values = [[-4, -3, -2, -2, -2, -2, -3, -4],
+                       [-1, -4, 0, 0, 0, 0, -4, -1],
+                       [-1, 0, 4, 5, 5, 4, 0, -1],
+                       [-1, 2, 3, 4, 4, 3, 2, -1],
+                       [-1, 0, 4, 5, 5, 4, 0, -1],
+                       [-1, 2, 3, 4, 4, 3, 2, -1],
+                       [0, -1, 2, 1, 1, 2, -1, 0],
+                       [-5, -4, -3, -3, -3, -3, -4, -5]]
+black_knight_values = list(reversed(white_knight_values))
+
+white_bishop_values = [[-3, -2, -2, -2, -2, -2, -2, -3],
+                       [-1, 0, 0, 0, 0, 0, 0, -1],
+                       [-1, 0, 2, 5, 5, 2, 0, -1],
+                       [-1, 2, 2, 5, 5, 2, 2, -1],
+                       [-1, 0, 5, 5, 5, 5, 0, -1],
+                       [-1, 2, 5, 5, 5, 5, 3, -1],
+                       [-1, 2, 0, 0, 1, 1, 5, -1],
+                       [-3, -2, -2, -2, -2, -2, -2, -3]]
+black_bishop_values = list(reversed(white_bishop_values))
+
+white_rook_values = [[1, 1, 1, 1, 1, 1, 1, 1],
+                     [4, 6, 6, 6, 6, 6, 6, 4],
+                     [-1, 0, 0, 0, 0, 0, 0, -1],
+                     [-1, 0, 0, 0, 0, 0, 0, -1],
+                     [-1, 0, 0, 0, 0, 0, 0, -1],
+                     [-1, 0, 0, 0, 0, 0, 0, -1],
+                     [-1, 0, 0, 0, 0, 0, 0, -1],
+                     [0, 0, 1, 6, 6, 1, 0, 0]]
+black_rook_values = list(reversed(white_rook_values))
+
+white_queen_values = [[-12, -9, -9, -5, -5, -9, -9, -12],
+                      [-9, 0, 0, 0, 0, 0, 0, -9],
+                      [-9, 0, 10, 10, 10, 10, 0, -9],
+                      [-5, 0, 10, 10, 10, 10, 0, -5],
+                      [0, 0, 10, 10, 10, 10, 0, -5],
+                      [-9, 10, 10, 10, 10, 10, 0, -9],
+                      [-9, 0, 0, 0, 0, 0, 0, -9],
+                      [-12, -9, -9, -5, -5, -9, -9, -12]]
+black_queen_values = list(reversed(white_queen_values))
+
+white_king_values = [[-30, -40, -40, -100, -100, -40, -40, -30],
+                     [-30, -40, -40, -75, -75, -40, -40, -30],
+                     [-30, -40, -40, -75, -75, -40, -40, -30],
+                     [-30, -40, -40, -75, -75, -40, -40, -30],
+                     [-30, -30, -30, -40, -40, -30, -30, -30],
+                     [-20, -30, -30, -30, -30, -30, -30, -20],
+                     [0, 0, 0, 0, 0, 0, 0, 0],
+                     [5, 7, 1, 0, 0, 1, 7, 5]]
+
+white_king_values_endgame = [[-25, -20, -15, -10, -10, -15, -20, -25],
+                             [-15, -10, -10, 0, 0, -10, -10, -15],
+                             [-15, -10, 20, 15, 15, 20, -10, -15],
+                             [-15, -10, 15, 20, 20, 15, -10, -15],
+                             [-15, -10, 15, 20, 20, 15, -10, -15],
+                             [-15, -10, 10, 15, 15, 10, -10, -15],
+                             [-15, -15, 0, 0, 0, 0, -15, -15],
+                             [-25, -15, -15, -15, -15, -15, -15, -25]]
+black_king_values = list(reversed(white_king_values))
+black_king_values_endgame = list(reversed(white_king_values_endgame))
+
 
 class Bot:
     def __init__(self, level, color, time_per_move=5):
@@ -19,13 +89,41 @@ class Bot:
             "R": 50,
             "K": 1
         }
+        self.eval_scores = {
+            "P": white_pawn_values,
+            "N": white_knight_values,
+            "B": white_bishop_values,
+            "R": white_rook_values,
+            "Q": white_queen_values,
+            "K": white_king_values,
+            "p": black_pawn_values,
+            "n": black_knight_values,
+            "b": black_bishop_values,
+            "r": black_rook_values,
+            "q": black_queen_values,
+            "k": black_king_values
+        }
+        self.eval_scores_endgame = {
+            "P": white_pawn_values,
+            "N": white_knight_values,
+            "B": white_bishop_values,
+            "R": white_rook_values,
+            "Q": white_queen_values,
+            "K": white_king_values_endgame,
+            "p": black_pawn_values,
+            "n": black_knight_values,
+            "b": black_bishop_values,
+            "r": black_rook_values,
+            "q": black_queen_values,
+            "k": black_king_values_endgame
+        }
 
     def get_move(self, board):
         if self.level == "random":
             time.sleep(1)
             return self.random_move(board)
         else:
-            # time.sleep(1)
+            time.sleep(1)
             return self.mini_max_move(board, int(self.level))
 
     def random_move(self, board):
@@ -61,37 +159,31 @@ class Bot:
             else:
                 return float('-inf')
 
-        # pieces = board.remaining_pieces
-        # score = 0
-        # for key in pieces.keys():
-        #     num = pieces[key]
-        #     if key.isupper():
-        #         score += num*self.piece_values[key]
-        #     else:
-        #         score -= num*self.piece_values[key.upper()]
-        # return score
+        score = board.total_piece_values
+        if board.white_castled:
+            score += 20
+        elif board.can_white_king_castle == 2:
+            score += 5
+        elif board.can_white_king_castle == 1:
+            score -= 8
+        else:
+            score -= 15
+        if board.black_castled:
+            score -= 20
+        elif board.can_black_king_castle == 2:
+            score -= 5
+        elif board.can_black_king_castle == 1:
+            score += 8
+        else:
+            score += 15
 
-        score = 0
-        board_chars = board.get_board_as_chars()
+        eval_scores = self.eval_scores_endgame if board.is_endgame() else self.eval_scores
         for i, row in enumerate(board.board):
             for j, piece in enumerate(row):
-                # if (i, j) in [(3, 3), (4, 4), (3, 4), (4, 3)]:  # center control
-                #     white_attackers_on_square, black_attackers_on_square = board.get_number_of_attackers_on_square_by_color(
-                #         (i, j), x_ray=True)
-                #     score += white_attackers_on_square
-                #     score -= black_attackers_on_square
                 if piece is None:
                     continue
-                if piece.getPieceColor() == WHITE:
-                    multiplier = 1
-                else:
-                    multiplier = -1
-                score += multiplier * (
-                        piece.getEvalValue() + len(piece.getAllPseudoLegalMoves(pos=(i, j), board=board_chars)))
-                # white_attackers_on_square, black_attackers_on_square = board.get_number_of_attackers_on_square_by_color(
-                #     (i, j), x_ray=True)
-                # score += white_attackers_on_square
-                # score -= black_attackers_on_square
+                multiplier = 1 if piece.getPieceColor == WHITE else -1
+                score += multiplier * eval_scores[piece.getPieceAsChar()][i][j]
 
         return score
 

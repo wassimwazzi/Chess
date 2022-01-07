@@ -229,7 +229,6 @@ class Rook(Piece):
         self.value = 5
         self.eval_value = 50
 
-
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return list(chain(getAllHorizontalMoves(pos, self.color, board), getAllVerticalMoves(pos, self.color, board)))
 
@@ -240,7 +239,10 @@ class Rook(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -265,7 +267,10 @@ class Bishop(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -290,7 +295,10 @@ class Knight(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -317,7 +325,10 @@ class Queen(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -350,7 +361,10 @@ class King(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -375,7 +389,10 @@ class Pawn(Piece):
         return self.value
 
     def getEvalValue(self):
-        return self.eval_value
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:

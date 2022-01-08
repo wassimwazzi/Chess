@@ -68,11 +68,9 @@ class Board:
             "black_score": self.black_score,
             "half_turns": self.half_turns,
             "turns": self.turns,
-            "unmoved_pieces": self.unmoved_pieces,
+            "unmoved_pieces": copy.deepcopy(self.unmoved_pieces),
             "turn_player": self.turn_player,
-            "remaining_pieces": self.remaining_pieces,
-            "killed_white_pieces": self.killed_white_pieces,
-            "killed_black_pieces": self.killed_black_pieces,
+            "remaining_pieces": copy.deepcopy(self.remaining_pieces),
             "checked_king_position": self.checked_king_position,
             "repetition_deque": copy.deepcopy(self.repetition_deque),
             "white_castled": self.white_castled,
@@ -1093,6 +1091,11 @@ class Board:
             end_piece_char = end_piece.getPieceAsChar()
             self.add_killed_piece(end_piece_char)
             self.remaining_pieces[end_piece_char] -= 1
+            if self.remaining_pieces[end_piece_char] < 0:
+                print(
+                    "Bad value when adding killed_piece {} at move number {} from {} to {}. Start piece = {}\n remaining_pieces: {}".format(
+                        end_piece, self.half_turns, start_pos, end_pos, start_piece, self.remaining_pieces
+                    ))
             self.total_n_pieces -= 1
             self.total_piece_values -= end_piece.getEvalValue()
             # self.increase_player_score(end_piece.getPieceValue())
@@ -1127,8 +1130,8 @@ class Board:
         self.prev_boards.pop()
 
     def make_move(self, start_pos, end_pos, promote_to=None):
-        self.print("Received make move request: start pos {}, end pos {}, promote_to {}".format(start_pos, end_pos,
-                                                                                                promote_to))
+        self.print("Received make move request: start pos {}, end pos {}, promote_to {}. Move number : {}".format(
+            start_pos, end_pos, promote_to, self.half_turns + 1))
         if self.checkmate:
             self.print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
@@ -1224,7 +1227,7 @@ class Board:
                             new_board.copy_from(self.make_copy())
                             new_board.move_en_passant(start_pos, end_pos, start_piece)
                             new_board.last_move = (start_pos, end_pos, None)
-                            all_boards.insert(0, new_board)
+                            all_boards.insert(len(all_boards) // 2, new_board)
                             continue
 
                         if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
@@ -1249,12 +1252,12 @@ class Board:
                                 if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
                                     new_board.set_king_in_checkmate(opponent_king_pos)
                                     new_board.last_move = (start_pos, end_pos, promote_to)
-                                    all_boards.append(new_board)
+                                    all_boards.insert(0, new_board)
                                 else:
                                     new_board.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars,
                                                         promoted_piece=promoted_piece)
                                     new_board.last_move = (start_pos, end_pos, promote_to)
-                                    all_boards.append(new_board)
+                                    all_boards.insert(0, new_board)
                             continue
 
                         else:
@@ -1273,12 +1276,15 @@ class Board:
                             if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
                                 new_board.set_king_in_checkmate(opponent_king_pos)
                                 new_board.last_move = (start_pos, end_pos, None)
-                                all_boards.append(new_board)
+                                all_boards.insert(0, new_board)
 
                             else:
                                 new_board.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars)
                                 new_board.last_move = (start_pos, end_pos, None)
-                                all_boards.append(new_board)
+                                if end_piece:
+                                    all_boards.insert(len(all_boards) // 4, new_board)
+                                else:
+                                    all_boards.append(new_board)
 
         return all_boards
 

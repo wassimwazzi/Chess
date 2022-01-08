@@ -5,53 +5,53 @@ from Piece import Pawn
 from config import WHITE, BLACK
 
 white_pawn_values = [[0, 0, 0, 0, 0, 0, 0, 0],
-                     [17, 20, 20, 20, 20, 20, 20, 20],
-                     [10, 10, 13, 13, 13, 13, 10, 10],
-                     [2, 2, 3, 5, 5, 3, 2, 2],
+                     [10, 10, 10, 10, 10, 10, 10, 10],
+                     [5, 5, 5, 5, 5, 5, 5, 5],
+                     [2, 1, 2, 3, 3, 2, 1, 2],
                      [0, 0, 0, 1, 1, 0, 0, 0],
                      [1, 0, -1, 1, 1, -1, 0, 1],
                      [1, 0, 0, -1, -1, 0, 0, 1],
                      [0, 0, 0, 0, 0, 0, 0, 0]]
 black_pawn_values = list(reversed(white_pawn_values))
 
-white_knight_values = [[-4, -3, -2, -2, -2, -2, -3, -4],
-                       [-1, -4, 0, 0, 0, 0, -4, -1],
-                       [-1, 0, 4, 5, 5, 4, 0, -1],
-                       [-1, 2, 3, 4, 4, 3, 2, -1],
-                       [-1, 0, 4, 5, 5, 4, 0, -1],
-                       [-1, 2, 3, 4, 4, 3, 2, -1],
-                       [0, -1, 2, 1, 1, 2, -1, 0],
-                       [-5, -3, -3, -3, -3, -3, -3, -5]]
+white_knight_values = [[-1.5, -1, -1, -1, -1, -1, -1, -1.5],
+                       [-1, -0.5, 0, 0, 0, 0, -0.5, -1],
+                       [-1, 0, 2, 3, 3, 2, 0, -1],
+                       [-1, 2, 1, 2, 2, 1, 1, -1],
+                       [-1, 0, 2, 3, 3, 2, 0, -1],
+                       [-1, 0.5, 1, 2, 2, 1, 0.5, -1],
+                       [0, -0.5, 1, 0.5, 0.5, 1, -0.5, 0],
+                       [-2, -1, -1, -1, -1, -1, -1, -1.5]]
 black_knight_values = list(reversed(white_knight_values))
 
-white_bishop_values = [[-3, -2, -2, -2, -2, -2, -2, -3],
-                       [-1, 0, 0, 0, 0, 0, 0, -1],
-                       [-1, 0, 2, 5, 5, 2, 0, -1],
-                       [-1, 2, 2, 5, 5, 2, 2, -1],
-                       [-1, 0, 5, 5, 5, 5, 0, -1],
-                       [-1, 2, 5, 5, 5, 5, 3, -1],
-                       [-1, 2, 0, 0, 1, 1, 5, -1],
-                       [-3, -2, -2, -2, -2, -2, -2, -3]]
+white_bishop_values = [[-3, -0.5, -1, -1, -1, -1, -0.5, -3],
+                       [-0.5, 0, 0, 0, 0, 0, 0, -0.5],
+                       [-0.5, 0, 2, 3, 3, 2, 0, -0.5],
+                       [-0.5, 1, 2, 3, 3, 2, 1, -0.5],
+                       [-0.5, 0, 3, 3, 3, 3, 0, -0.5],
+                       [-0.5, 2, 3, 3, 3, 3, 2, -0.5],
+                       [-0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, -0.5],
+                       [-3, -0.5, -1, -1, -1, -1, -0.5, -3]]
 black_bishop_values = list(reversed(white_bishop_values))
 
 white_rook_values = [[1, 1, 1, 1, 1, 1, 1, 1],
-                     [4, 6, 6, 6, 6, 6, 6, 4],
+                     [3, 4, 4, 4, 4, 4, 4, 3],
                      [-1, 0, 0, 0, 0, 0, 0, -1],
                      [-1, 0, 0, 0, 0, 0, 0, -1],
                      [-1, 0, 0, 0, 0, 0, 0, -1],
                      [-1, 0, 0, 0, 0, 0, 0, -1],
                      [-1, 0, 0, 0, 0, 0, 0, -1],
-                     [0, 0, 1, 6, 6, 1, 0, 0]]
+                     [0, 0, 1, 4, 4, 1, 0, 0]]
 black_rook_values = list(reversed(white_rook_values))
 
-white_queen_values = [[-12, -9, -9, -5, -5, -9, -9, -12],
-                      [-9, 0, 0, 0, 0, 0, 0, -9],
-                      [-9, 0, 10, 10, 10, 10, 0, -9],
-                      [-5, 0, 10, 10, 10, 10, 0, -5],
-                      [0, 0, 10, 10, 10, 10, 0, -5],
-                      [-9, 10, 10, 10, 10, 10, 0, -9],
-                      [-9, 0, 0, 0, 0, 0, 0, -9],
-                      [-12, -9, -9, -5, -5, -9, -9, -12]]
+white_queen_values = [[-4, -2, -2, -2, -2, -2, -2, -4],
+                      [-2, 0, 0, 0, 0, 0, 0, -2],
+                      [-2, 0, 3, 3, 3, 3, 0, -2],
+                      [-2, 0, 5, 5, 5, 5, 0, -2],
+                      [0, 0, 5, 5, 5, 5, 0, 0],
+                      [-2, 0, 3, 3, 3, 3, 0, -2],
+                      [-2, 0, 0, 0, 0, 0, 0, -2],
+                      [-4, -2, -2, -2, -2, -2, -2, -4]]
 black_queen_values = list(reversed(white_queen_values))
 
 white_king_values = [[-30, -40, -40, -100, -100, -40, -40, -30],
@@ -61,7 +61,7 @@ white_king_values = [[-30, -40, -40, -100, -100, -40, -40, -30],
                      [-30, -30, -30, -40, -40, -30, -30, -30],
                      [-20, -30, -30, -30, -30, -30, -30, -20],
                      [0, 0, 0, 0, 0, 0, 0, 0],
-                     [5, 7, 1, 0, 0, 1, 7, 5]]
+                     [7, 8, 1, 0, 0, 1, 8, 7]]
 
 white_king_values_endgame = [[-25, -20, -15, -10, -10, -15, -20, -25],
                              [-15, -10, -10, 0, 0, -10, -10, -15],
@@ -147,11 +147,14 @@ class Bot:
             max = True
         else:
             max = False
-        board, eval, visited_nodes =  self.minimax(board, depth, float('-inf'), float('inf'), max)
+        board, eval, visited_nodes = self.minimax(board, depth, float('-inf'), float('inf'), max)
         print("Visited {} nodes, best eval = {}".format(visited_nodes, eval))
         return board.last_move
 
     def evaluate(self, board):
+        # TODO
+        # check if pieces are protected by pawns
+        # check if pawns are blocking the movement of pieces
         if board.draw:
             return 0
 
@@ -182,12 +185,14 @@ class Bot:
             score += 15
 
         eval_scores = self.eval_scores_endgame if board.is_endgame() else self.eval_scores
+        board_chars = board.get_board_as_chars()
         for i, row in enumerate(board.board):
             for j, piece in enumerate(row):
                 if piece is None:
                     continue
                 multiplier = 1 if piece.getPieceColor() == WHITE else -1
-                score += multiplier * eval_scores[piece.getPieceAsChar()][i][j]
+                score += 2*multiplier * eval_scores[piece.getPieceAsChar()][i][j]
+                score += multiplier * len(piece.getAllPseudoLegalMoves((i, j), board_chars)) # use AllLegalMoves if performance is improved
 
         return score
 

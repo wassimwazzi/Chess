@@ -4,6 +4,7 @@ import time
 from Piece import Pawn
 from config import WHITE, BLACK
 
+# Divide into opening, middlegame, and endgame
 white_pawn_values = [[0, 0, 0, 0, 0, 0, 0, 0],
                      [10, 10, 10, 10, 10, 10, 10, 10],
                      [5, 5, 5, 5, 5, 5, 5, 5],
@@ -191,8 +192,9 @@ class Bot:
                 if piece is None:
                     continue
                 multiplier = 1 if piece.getPieceColor() == WHITE else -1
-                score += 2*multiplier * eval_scores[piece.getPieceAsChar()][i][j]
-                score += multiplier * len(piece.getAllPseudoLegalMoves((i, j), board_chars)) # use AllLegalMoves if performance is improved
+                #score += 2 * multiplier * eval_scores[piece.getPieceAsChar()][i][j]
+                score += multiplier * len(
+                    piece.getAllPseudoLegalMoves((i, j), board_chars))  # use AllLegalMoves if performance is improved
 
         return score
 

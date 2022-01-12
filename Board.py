@@ -1,5 +1,9 @@
 import copy
+import random
 from collections import deque
+
+import numpy as np
+
 from Status import Status
 
 from Piece import Rook, Bishop, Knight, King, Queen, Pawn
@@ -9,10 +13,54 @@ from config import BOARD_DIMENSIONS, STARTING_POSITION, BLACK, WHITE
 The Board is viewed in reverse. Index (0,0) of board represents the a8 square in a chess board
 """
 
+POSSIBLE_PROMOTIONS = {
+    "Bishop": Bishop,
+    "Knight": Knight,
+    "Queen": Queen,
+    "Rook": Rook
+}
+zobrist_piece_index = {
+    "P": 0,
+    "N": 1,
+    "B": 2,
+    "R": 3,
+    "Q": 4,
+    "K": 5,
+    "p": 6,
+    "n": 7,
+    "b": 8,
+    "r": 9,
+    "q": 10,
+    "k": 11
+}
+
+
+def init_zobrist():
+    # fill a table of random numbers/bitstrings
+    table = np.zeros(shape=(64, 12), dtype=np.uint64)
+    for i in range(0, 64):  # loop over the board, represented as a linear array
+        for j in range(0, 12):  # loop over the pieces
+            table[i][j] = random.getrandbits(64)
+    return table
+
+
+def hash(board, table):
+    h = 0
+    for i in range(8):
+        for j in range(8):  # loop over the board positions
+            if board[i][j] is not None:
+                piece_index = zobrist_piece_index[board[i][j]]
+                board_index = (i * 8) + j
+                h ^= table[board_index][piece_index]
+    return h
+
+
+ZOBRIST_TABLE = init_zobrist()
+
 
 class Board:
 
-    def __init__(self, verbose=False):
+    def __init__(self, initialize=True, verbose=False):
         self.en_passant = []
         self.prev_boards = []
         self.undone_boards = []
@@ -29,17 +77,12 @@ class Board:
         self.can_white_king_castle = 2
         self.can_black_king_castle = 2
         self.unmoved_pieces = ["K", "Rl", "Rr", "k", "rl", "rr"]
-        self.board = self.create_board()
-        self.total_n_pieces = self.get_n_pieces()  # needs to be after create_board()
+        if initialize:
+            self.board = self.create_board()
+            self.total_n_pieces = self.get_n_pieces()  # needs to be after create_board()
         self.checkmate = False
         self.draw = False
         self.winner = None
-        self.POSSIBLE_PROMOTIONS = {
-            "Bishop": Bishop,
-            "Knight": Knight,
-            "Queen": Queen,
-            "Rook": Rook
-        }
         self.checked_king_position = None
         self.last_move = (None, None, None)  # start_pos, end_pos, promotion
         self.verbose = verbose
@@ -257,7 +300,7 @@ class Board:
         return self.draw or self.checkmate
 
     def is_endgame(self):
-        if self.total_n_pieces > 12:
+        if self.total_n_pieces > 15:
             return False
         else:
             return True
@@ -1132,6 +1175,7 @@ class Board:
     def make_move(self, start_pos, end_pos, promote_to=None):
         self.print("Received make move request: start pos {}, end pos {}, promote_to {}. Move number : {}".format(
             start_pos, end_pos, promote_to, self.half_turns + 1))
+        print("Current score: {}".format(self.total_piece_values))
         if self.checkmate:
             self.print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
@@ -1184,7 +1228,7 @@ class Board:
                     self.print("Select Piece to promote Pawn to")
                     self.bad_move()
                     return Status.NEED_MORE_INFORMATION
-                promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
+                promoted_piece = POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
                 self.board[end_row][end_col] = promoted_piece
                 self.board[start_row][start_col] = None
 
@@ -1223,7 +1267,7 @@ class Board:
                         end_piece = self.board[end_row][end_col]
                         if isinstance(start_piece, Pawn) and abs(
                                 start_col - end_col) == 1 and end_piece is None:  # En Passant
-                            new_board = Board()
+                            new_board = Board(initialize=False)
                             new_board.copy_from(self.make_copy())
                             new_board.move_en_passant(start_pos, end_pos, start_piece)
                             new_board.last_move = (start_pos, end_pos, None)
@@ -1231,7 +1275,7 @@ class Board:
                             continue
 
                         if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
-                            new_board = Board()
+                            new_board = Board(initialize=False)
                             new_board.copy_from(self.make_copy())
                             new_board.castle(start_pos, end_pos, start_piece, end_piece)
                             new_board.last_move = (start_pos, end_pos, None)
@@ -1240,9 +1284,9 @@ class Board:
 
                         if isinstance(start_piece, Pawn) and end_row in [0, 7]:  # Promote Pawn
                             for promote_to in ["Bishop", "Knight", "Queen", "Rook"]:
-                                new_board = Board()
+                                new_board = Board(initialize=False)
                                 new_board.copy_from(self.make_copy())
-                                promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
+                                promoted_piece = POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
                                 new_board.board[end_row][end_col] = promoted_piece
                                 new_board.board[start_row][start_col] = None
 
@@ -1261,7 +1305,7 @@ class Board:
                             continue
 
                         else:
-                            new_board = Board()
+                            new_board = Board(initialize=False)
                             new_board.copy_from(self.make_copy())
                             new_board.board[end_row][end_col] = start_piece
                             new_board.board[start_row][start_col] = None

@@ -84,13 +84,13 @@ class Engine:
         self.bot2 = None
 
     def start_game(self, player1, player2, viewing_player, switch_viewing_player):
-        self.player1 = player1.lower()
+        self.player1 = player1['level'].lower()
         if not self.player1 == "human":
-            self.bot1 = Bot(level=self.player1, color=WHITE)
+            self.bot1 = Bot(attributes=player1, color=WHITE)
 
-        self.player2 = player2.lower()
+        self.player2 = player2['level'].lower()
         if not self.player2 == "human":
-            self.bot2 = Bot(level=self.player2, color=BLACK)
+            self.bot2 = Bot(attributes=player2, color=BLACK)
 
         self.turn_player = WHITE
         self.viewing_player = viewing_player

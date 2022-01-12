@@ -21,8 +21,18 @@ X_MARGIN = 30
 Y_MARGIN = 30
 
 square_colors = [(255, 248, 220), (210, 170, 125)]
-PLAYER1 = "2"
-PLAYER2 = "3"
+PLAYER1 = {
+    "level": "2",
+    "forward_pruning": False,
+    "pruning_ratio": 1/5,
+    "time_per_move": 10
+}
+PLAYER2 = {
+    "level": "3",
+    "forward_pruning": False,
+    "pruning_ratio": 1/5,
+    "time_per_move": 10
+}
 # PLAYER1 = "human"
 # PLAYER2 = "human"
 VIEWING_PLAYER = WHITE

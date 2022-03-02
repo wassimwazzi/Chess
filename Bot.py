@@ -191,6 +191,8 @@ white_king_values_endgame = [[-3, -3, -2, -2, -2, -2, -3, -3],
 
 black_king_values_endgame = list(reversed(white_king_values_endgame))
 
+transposition_table = {}
+
 
 # endregion
 
@@ -201,8 +203,11 @@ class Bot:
         self.color = color
         self.promotions = ["Queen", "Rook", "Knight", "Bishop"]
         self.time_per_move = 5
+        self.start_time_for_move = 0
         self.forward_pruning = True
         self.pruning_ratio = 4 / 5
+        self.transpositions_found = 0
+        self.use_eval_scores=False
         for key in attributes:
             setattr(self, key, attributes[key])
         self.piece_values = {
@@ -262,8 +267,9 @@ class Bot:
         if self.level == "random":
             time.sleep(1)
             return self.random_move(board)
+        elif self.level == "IDA":
+            return self.ida_minimax(board)
         else:
-            time.sleep(1)
             return self.mini_max_move(board, int(self.level))
 
     def random_move(self, board):
@@ -282,14 +288,44 @@ class Bot:
             promotion = random.choice(self.promotions)
         return start, end, promotion
 
+    def ida_minimax(self, board):
+        if self.color == WHITE:
+            max = True
+        else:
+            max = False
+        self.transpositions_found = 0
+        self.start_time_for_move = time.time()
+        best_eval = float('-inf') if max else float('inf')
+        visited_nodes = 0
+        for depth in range(1, 1000):
+            if time.time() - self.start_time_for_move >= self.time_per_move:
+                break
+            new_board, new_eval, visited_nodes = self.minimax(
+                board, depth, float('-inf'), float('inf'), max)
+            if new_eval > best_eval and max:
+                best_eval = new_eval
+                board = new_board
+            elif new_eval < best_eval and not max:
+                best_eval = new_eval
+                board = new_board
+            #print("{} transpositions found at depth {}".format(self.transpositions_found, depth))
+
+        print("Visited {} nodes, best eval = {}".format(visited_nodes, best_eval))
+        print("{} transpositions found, total time: {} ".format(self.transpositions_found,
+                                                                time.time() - self.start_time_for_move))
+        return board.last_move
+
     def mini_max_move(self, board, depth):
         if self.color == WHITE:
             max = True
         else:
             max = False
-        board, eval, visited_nodes = self.minimax(
-            board, depth, float('-inf'), float('inf'), max)
+        self.transpositions_found = 0
+        self.start_time_for_move = time.time()
+        board, eval, visited_nodes = self.minimax(board, depth, float('-inf'), float('inf'), max, timer=False)
         print("Visited {} nodes, best eval = {}".format(visited_nodes, eval))
+        print("{} transpositions found, total time: {} ".format(self.transpositions_found,
+                                                                time.time() - self.start_time_for_move))
         return board.last_move
 
     def evaluate(self, board):
@@ -322,7 +358,6 @@ class Bot:
             score += 1
         else:
             score += 2
-
         eval_scores = self.eval_scores_endgame if board.is_endgame() else self.eval_scores_middlegame if board.turns > 12 else self.eval_scores_opening
         board_chars = board.get_board_as_chars()
         for i, row in enumerate(board.board):
@@ -330,19 +365,31 @@ class Bot:
                 if piece is None:
                     continue
                 multiplier = 1 if piece.getPieceColor() == WHITE else -1
-                score += multiplier * eval_scores[piece.getPieceAsChar()][i][j]
+                if self.use_eval_scores:
+                    score += multiplier * eval_scores[piece.getPieceAsChar()][i][j]
                 score += multiplier * 0.3 * len(
                     piece.getAllPseudoLegalMoves((i, j), board_chars))  # use AllLegalMoves if performance is improved
 
+        transposition_table[board.get_zobrist()] = {
+            "score": score,
+            "turn_player": board.turn_player,
+        }
         return score
 
     def minimax(self, board, depth, alpha, beta, maximizingPlayer, visited_nodes=0,
-                time_to_prune=False):
+                time_to_prune=False, timer=True):
+        if timer and time.time() - self.start_time_for_move >= self.time_per_move:
+            return board, None, visited_nodes
         if depth == 0 or board.is_game_over():
-            return board, self.evaluate(board), visited_nodes
+            pos = transposition_table.get(board.get_zobrist())
+            if pos and board.get_turn_player() == pos['turn_player']:
+                evaluation = pos['score']
+                self.transpositions_found += 1
+            else:
+                evaluation = self.evaluate(board)
+            return board, evaluation, visited_nodes
 
         board_children = board.get_all_next_boards()
-        visited_nodes += len(board_children)
         best_moves_indices = [0]
 
         if maximizingPlayer:
@@ -350,15 +397,18 @@ class Bot:
                 n = int(len(board_children) * self.pruning_ratio)
                 list_of_evals = np.array([self.evaluate(board) for board in board_children])
                 board_children = [board_children[i] for i in list_of_evals.argsort()[n:]]  # get the top n best moves
+            visited_nodes += len(board_children)
             maxEval = float('-inf')
             for i, board_child in enumerate(reversed(board_children)):
-                board, eval, visited_nodes = self.minimax(board_child, depth - 1, alpha, beta, False, visited_nodes, not time_to_prune)
-                if eval > maxEval:
+                board, eval, visited_nodes = self.minimax(board_child, depth - 1, alpha, beta, False, visited_nodes,
+                                                          not time_to_prune)
+                if eval is None:
+                    continue
+                elif eval > maxEval:
                     maxEval = eval
                     best_moves_indices = [i]
-                elif eval == maxEval:  # select new move 1/3 of the times if tie
-                    if random.uniform(0, 1) > 2 / 3:
-                        best_moves_indices.append(i)
+                elif eval == maxEval:
+                    best_moves_indices.append(i)
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
@@ -369,19 +419,22 @@ class Bot:
                 n = int(len(board_children) * (1 - self.pruning_ratio))
                 if n > 2:
                     list_of_evals = np.array([self.evaluate(board) for board in board_children])
-                    board_children = [board_children[i] for i in list_of_evals.argsort()[:n]]  # get the top n best moves
+                    board_children = [board_children[i] for i in
+                                      list_of_evals.argsort()[:n]]  # get the top n best moves
                 else:
                     print("Won't prune, n={}".format(n))
+            visited_nodes += len(board_children)
             minEval = float('inf')
             for i, board_child in enumerate(board_children):  # reversed since the best move is at the end of the list
                 board, eval, visited_nodes = self.minimax(board_child, depth - 1, alpha, beta, True, visited_nodes,
                                                           not time_to_prune)
-                if eval < minEval:
+                if eval is None:
+                    continue
+                elif eval < minEval:
                     minEval = eval
                     best_moves_indices = [i]
-                elif eval == minEval:  # select new move 1/3 of the times if tie
-                    if random.uniform(0, 1) > 2 / 3:
-                        best_moves_indices.append(i)
+                elif eval == minEval:
+                    best_moves_indices.append(i)
                 beta = min(beta, eval)
                 if beta <= alpha:
                     break

@@ -22,16 +22,17 @@ Y_MARGIN = 30
 
 square_colors = [(255, 248, 220), (210, 170, 125)]
 PLAYER1 = {
-    "level": "2",
+    "level": "human",
     "forward_pruning": False,
     "pruning_ratio": 1/5,
-    "time_per_move": 10
+    "time_per_move": 10,
+    "use_eval_scored": False
 }
 PLAYER2 = {
     "level": "3",
     "forward_pruning": False,
     "pruning_ratio": 1/5,
-    "time_per_move": 10
+    "use_eval_scores": True
 }
 # PLAYER1 = "human"
 # PLAYER2 = "human"

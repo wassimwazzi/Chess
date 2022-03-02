@@ -36,6 +36,7 @@ zobrist_piece_index = {
 
 
 def init_zobrist():
+    random.seed(260825559)
     # fill a table of random numbers/bitstrings
     table = np.zeros(shape=(64, 12), dtype=np.uint64)
     for i in range(0, 64):  # loop over the board, represented as a linear array
@@ -45,7 +46,8 @@ def init_zobrist():
 
 
 def hash(board, table):
-    h = 0
+    h_np = np.zeros(shape=(1), dtype=np.uint64)
+    h = h_np[0]
     for i in range(8):
         for j in range(8):  # loop over the board positions
             if board[i][j] is not None:
@@ -80,6 +82,7 @@ class Board:
         if initialize:
             self.board = self.create_board()
             self.total_n_pieces = self.get_n_pieces()  # needs to be after create_board()
+            self.zobrist_hash = hash(self.get_board_as_chars(), ZOBRIST_TABLE)
         self.checkmate = False
         self.draw = False
         self.winner = None
@@ -95,6 +98,9 @@ class Board:
     def print(self, line):
         if self.verbose:
             print(line)
+
+    def get_zobrist(self):
+        return str(self.zobrist_hash)
 
     def copy_from(self, target):
         for key in target:
@@ -120,7 +126,8 @@ class Board:
             "black_castled": self.black_castled,
             "has_piece_ben_captured": self.has_piece_been_captured,
             "total_piece_values": self.total_piece_values,
-            "total_n_pieces": self.total_n_pieces
+            "total_n_pieces": self.total_n_pieces,
+            "zobrist_hash": self.zobrist_hash
         }
         # return copy.deepcopy(x)
         return x
@@ -888,16 +895,39 @@ class Board:
     def castle(self, start_pos, end_pos, start_piece, end_piece):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
-        # if self.can_castle(start_pos, end_pos):
         self.print("Castling")
         self.board[end_row][end_col] = start_piece
         self.board[start_row][start_col] = None
+        # remove king from zobrist
+        piece_index = zobrist_piece_index[start_piece.getPieceAsChar()]
+        board_index = (start_row * 8) + start_col
+        self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+        end_piece_char = "R" if self.turn_player == WHITE else "r"
         if start_col > end_col:
             self.board[end_row][end_col + 1] = self.board[end_row][end_col - 2]
             self.board[end_row][end_col - 2] = None
+            # remove rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col - 2
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # add rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col + 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
         else:
             self.board[end_row][end_col - 1] = self.board[end_row][end_col + 1]
             self.board[end_row][end_col + 1] = None
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col + 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # add rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col - 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+        # add king
+        piece_index = zobrist_piece_index[start_piece.getPieceAsChar()]
+        board_index = (end_row * 8) + end_col
+        self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
         self.good_move(start_pos, end_pos, start_piece, end_piece, castled=True)
         return Status.OK
         # else:
@@ -1122,14 +1152,6 @@ class Board:
             else:
                 self.black_castled = True
 
-        if promoted_piece:
-            promoted_piece_char = promoted_piece.getPieceAsChar()
-            self.remaining_pieces[promoted_piece_char] += 1
-            if self.turn_player == WHITE:
-                self.remaining_pieces["P"] -= 1
-            else:
-                self.remaining_pieces["p"] -= 1
-
         if end_piece:
             end_piece_char = end_piece.getPieceAsChar()
             self.add_killed_piece(end_piece_char)
@@ -1145,6 +1167,10 @@ class Board:
             # future idea: https://www.chessprogramming.org/Simplified_Evaluation_Function, doesn't really work
             # create a helper function that takes the end_piece, and position, and calculates the score of the piece based on the position ( as in the website )
             self.has_piece_been_captured = True
+            # remove killed piece from zobrist
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_pos[0] * 8) + end_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
             if isinstance(end_piece, King):
                 self.print("Something went wrong? King was captured!")
                 self.print("Here is the board after capture: {}".format(self.get_board_as_chars()))
@@ -1152,6 +1178,37 @@ class Board:
                 return Status.INVALID_REQUEST
         else:
             self.has_piece_been_captured = False
+
+        if promoted_piece:
+            promoted_piece_char = promoted_piece.getPieceAsChar()
+            self.remaining_pieces[promoted_piece_char] += 1
+            if self.turn_player == WHITE:
+                self.remaining_pieces["P"] -= 1
+                # remove pawn from zobrist
+                piece_index = zobrist_piece_index["P"]
+                board_index = (start_pos[0] * 8) + start_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                # add promoted piece
+                piece_index = zobrist_piece_index[promoted_piece_char]
+                board_index = (end_pos[0] * 8) + end_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            else:
+                piece_index = zobrist_piece_index["p"]
+                board_index = (start_pos[0] * 8) + start_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                piece_index = zobrist_piece_index[promoted_piece_char]
+                board_index = (end_pos[0] * 8) + end_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                self.remaining_pieces["p"] -= 1
+        elif not castled:
+            start_piece_char = start_piece.getPieceAsChar()
+            piece_index = zobrist_piece_index[start_piece_char]
+            board_index = (start_pos[0] * 8) + start_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # replace at new position
+            piece_index = zobrist_piece_index[start_piece_char]
+            board_index = (end_pos[0] * 8) + end_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
 
         if self.check_draw(start_pos, end_pos, start_piece, end_piece):
             self.draw = True

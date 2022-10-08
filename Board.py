@@ -1,5 +1,9 @@
 import copy
-from logging import log
+import random
+from collections import deque
+
+import numpy as np
+
 from Status import Status
 
 from Piece import Rook, Bishop, Knight, King, Queen, Pawn
@@ -9,10 +13,56 @@ from config import BOARD_DIMENSIONS, STARTING_POSITION, BLACK, WHITE
 The Board is viewed in reverse. Index (0,0) of board represents the a8 square in a chess board
 """
 
+POSSIBLE_PROMOTIONS = {
+    "Bishop": Bishop,
+    "Knight": Knight,
+    "Queen": Queen,
+    "Rook": Rook
+}
+zobrist_piece_index = {
+    "P": 0,
+    "N": 1,
+    "B": 2,
+    "R": 3,
+    "Q": 4,
+    "K": 5,
+    "p": 6,
+    "n": 7,
+    "b": 8,
+    "r": 9,
+    "q": 10,
+    "k": 11
+}
+
+
+def init_zobrist():
+    random.seed(260825559)
+    # fill a table of random numbers/bitstrings
+    table = np.zeros(shape=(64, 12), dtype=np.uint64)
+    for i in range(0, 64):  # loop over the board, represented as a linear array
+        for j in range(0, 12):  # loop over the pieces
+            table[i][j] = random.getrandbits(64)
+    return table
+
+
+def hash(board, table):
+    h_np = np.zeros(shape=(1), dtype=np.uint64)
+    h = h_np[0]
+    for i in range(8):
+        for j in range(8):  # loop over the board positions
+            if board[i][j] is not None:
+                piece_index = zobrist_piece_index[board[i][j]]
+                board_index = (i * 8) + j
+                h ^= table[board_index][piece_index]
+    return h
+
+
+ZOBRIST_TABLE = init_zobrist()
+
 
 class Board:
 
-    def __init__(self):
+    def __init__(self, initialize=True, verbose=False):
         self.en_passant = []
         self.prev_boards = []
         self.undone_boards = []
@@ -29,17 +79,28 @@ class Board:
         self.can_white_king_castle = 2
         self.can_black_king_castle = 2
         self.unmoved_pieces = ["K", "Rl", "Rr", "k", "rl", "rr"]
-        self.board = self.create_board()
+        if initialize:
+            self.board = self.create_board()
+            self.total_n_pieces = self.get_n_pieces()  # needs to be after create_board()
+            self.zobrist_hash = hash(self.get_board_as_chars(), ZOBRIST_TABLE)
         self.checkmate = False
         self.draw = False
         self.winner = None
-        self.POSSIBLE_PROMOTIONS = {
-            "Bishop": Bishop,
-            "Knight": Knight,
-            "Queen": Queen,
-            "Rook": Rook
-        }
         self.checked_king_position = None
+        self.last_move = (None, None, None)  # start_pos, end_pos, promotion
+        self.verbose = verbose
+        self.repetition_deque = deque([], maxlen=6)
+        self.white_castled = False
+        self.black_castled = False
+        self.has_piece_been_captured = False
+        self.total_piece_values = 0
+
+    def print(self, line):
+        if self.verbose:
+            print(line)
+
+    def get_zobrist(self):
+        return str(self.zobrist_hash)
 
     def copy_from(self, target):
         for key in target:
@@ -47,7 +108,7 @@ class Board:
 
     def make_copy(self):
         x = {
-            "board": self.board,
+            "board": copy.deepcopy(self.board),
             "white_king_checked": self.white_king_checked,
             "black_king_checked": self.black_king_checked,
             "can_white_king_castle": self.can_white_king_castle,
@@ -55,15 +116,27 @@ class Board:
             "white_score": self.white_score,
             "black_score": self.black_score,
             "half_turns": self.half_turns,
-            "turns": self.half_turns,
-            "unmoved_pieces": self.unmoved_pieces,
+            "turns": self.turns,
+            "unmoved_pieces": copy.deepcopy(self.unmoved_pieces),
             "turn_player": self.turn_player,
-            "remaining_pieces": self.remaining_pieces,
-            "killed_white_pieces": self.killed_white_pieces,
-            "killed_black_pieces": self.killed_black_pieces,
-            "checked_king_position": self.checked_king_position
+            "remaining_pieces": copy.deepcopy(self.remaining_pieces),
+            "checked_king_position": self.checked_king_position,
+            "repetition_deque": copy.deepcopy(self.repetition_deque),
+            "white_castled": self.white_castled,
+            "black_castled": self.black_castled,
+            "has_piece_ben_captured": self.has_piece_been_captured,
+            "total_piece_values": self.total_piece_values,
+            "total_n_pieces": self.total_n_pieces,
+            "zobrist_hash": self.zobrist_hash
         }
-        return copy.deepcopy(x)
+        # return copy.deepcopy(x)
+        return x
+
+    def get_n_pieces(self):
+        total = 0
+        for v in self.remaining_pieces.values():
+            total += v
+        return total
 
     def fill_board_row(self, row, board, row_index):
         col_index_increment = 0
@@ -176,6 +249,22 @@ class Board:
         else:
             self.killed_white_pieces.append(piece)
 
+    def add_to_deque(self, board_chars):
+        if self.turns < 1:
+            print("self.turns < 1".format(self.turns))
+            return
+        if self.turns <= 6:
+            if self.turn_player == WHITE:
+                self.repetition_deque.insert(self.turns - 1, [board_chars])
+            else:
+                if not self.repetition_deque:
+                    print("Empty repetition deque on Black's turn\n board_chars:{}\n ".format(board_chars, ))
+                self.repetition_deque[self.turns - 1].append(board_chars)
+        elif self.turn_player == WHITE:
+            self.repetition_deque.append([board_chars])
+        else:
+            self.repetition_deque[-1].append(board_chars)
+
     def get_board_as_chars(self, reverse=False):
         board_as_chars = []
         if reverse:
@@ -203,8 +292,31 @@ class Board:
     def get_turn_player(self):
         return self.turn_player
 
+    def get_remaining_pieces(self):
+        remaining_pieces = []
+        for row in self.board:
+            for piece in row:
+                if piece is not None:
+                    remaining_pieces.append(piece.getPieceAsChar())
+        return remaining_pieces
+
     def change_turn_player(self):
         self.turn_player = 1 - self.turn_player
+
+    def is_game_over(self):
+        return self.draw or self.checkmate
+
+    def is_endgame(self):
+        if self.total_n_pieces > 15:
+            return False
+        else:
+            return True
+
+    def has_castled(self, color):
+        if color == WHITE:
+            return self.white_castled
+        elif color == BLACK:
+            return self.black_castled
 
     def go_back_a_move(self):
         if len(self.prev_boards) == 0:
@@ -230,8 +342,8 @@ class Board:
                 if isinstance(piece, King) and piece.getPieceColor() == color:
                     return i, j
 
-    def is_piece_attacked(self, piece_pos, board_as_chars, attacking_color=None, break_at_first_finding=True,
-                          get_coords=False):
+    def is_piece_attacked_old(self, piece_pos, board_as_chars, attacking_color=None, break_at_first_finding=True,
+                              get_coords=False):
         pieces = []
         coords = []
         result = False
@@ -255,8 +367,456 @@ class Board:
         else:
             return result
 
+    def get_number_of_attackers_on_square_by_color(self, piece_pos, x_ray=False):
+        if piece_pos is None:
+            print("piece_pos is None")
+            return
+        result_white, result_black = 0, 0
+        stop_white, stop_black = False, False
+        piece_row, piece_col = piece_pos
+        # Horizontally to the left
+        i = 1
+        while piece_col - i >= 0:
+            piece = self.board[piece_row][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and isinstance(piece, King):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+        # Horizontally to the right
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_col + i < 8:
+            piece = self.board[piece_row][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and isinstance(piece, King):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+
+        # Up
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row - i >= 0:
+            piece = self.board[piece_row - i][piece_col]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and isinstance(piece, King):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+        # Down
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row + i < 8:
+            piece = self.board[piece_row + i][piece_col]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and isinstance(piece, King):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+
+        # Diagonally
+
+        # Up and right
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row - i >= 0 and piece_col + i < 8:
+            piece = self.board[piece_row - i][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == BLACK)):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+        # Up and left
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row - i >= 0 and piece_col - i >= 0:
+            piece = self.board[piece_row - i][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == BLACK)):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+        # Down and right
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row + i < 8 and piece_col + i < 8:
+            piece = self.board[piece_row + i][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == WHITE)):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+
+        # Down and left
+        stop_white, stop_black = False, False
+        i = 1
+        while piece_row + i < 8 and piece_col - i >= 0:
+            piece = self.board[piece_row + i][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == WHITE)):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                    stop_black = True
+                elif not stop_black:
+                    result_black += 1
+                    stop_white = True
+            elif not x_ray:
+                break
+
+        # Horse Moves
+        if piece_row - 2 >= 0 and piece_col + 1 < 8:
+            piece = self.board[piece_row - 2][piece_col + 1]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row - 1 >= 0 and piece_col - 2 >= 0:
+            piece = self.board[piece_row - 1][piece_col - 2]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row - 1 >= 0 and piece_col + 2 < 8:
+            piece = self.board[piece_row - 1][piece_col + 2]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row - 2 >= 0 and piece_col - 1 >= 0:
+            piece = self.board[piece_row - 2][piece_col - 1]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row + 2 < 8 and piece_col + 1 < 8:
+            piece = self.board[piece_row + 2][piece_col + 1]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row + 1 < 8 and piece_col - 2 >= 0:
+            piece = self.board[piece_row + 1][piece_col - 2]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row + 1 < 8 and piece_col + 2 < 8:
+            piece = self.board[piece_row + 1][piece_col + 2]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        if piece_row + 2 < 8 and piece_col - 1 >= 0:
+            piece = self.board[piece_row + 2][piece_col - 1]
+            if isinstance(piece, Knight):
+                if piece.getPieceColor() == WHITE and not stop_white:
+                    result_white += 1
+                elif not stop_black:
+                    result_black += 1
+        return result_white, result_black
+
+    def is_piece_attacked(self, piece_pos, attacking_color=None):
+        # Instead of looking at all the moves of all the pieces, only look at the diagonal, horizontal, and vertical,
+        # and L positions from the piece Stop looking in the direction at the first encounter of a piece
+        if piece_pos is None:
+            print("piece_pos is None")
+            return
+        piece_row, piece_col = piece_pos
+        if attacking_color is None:
+            attacking_color = not self.turn_player
+        # Horizontally to the left
+        i = 1
+        while piece_col - i >= 0:
+            piece = self.board[piece_row][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                return True
+            elif i == 1 and isinstance(piece, King):
+                return True
+            else:
+                break
+        # Horizontally to the right
+        i = 1
+        while piece_col + i < 8:
+            piece = self.board[piece_row][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                return True
+            elif i == 1 and isinstance(piece, King):
+                return True
+            else:
+                break
+
+        # Up
+        i = 1
+        while piece_row - i >= 0:
+            piece = self.board[piece_row - i][piece_col]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                return True
+            elif i == 1 and isinstance(piece, King):
+                return True
+            else:
+                break
+        # Down
+        i = 1
+        while piece_row + i < 8:
+            piece = self.board[piece_row + i][piece_col]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Rook):
+                return True
+            elif i == 1 and isinstance(piece, King):
+                return True
+            else:
+                break
+
+        # Diagonally
+
+        # Up and right
+        i = 1
+        while piece_row - i >= 0 and piece_col + i < 8:
+            piece = self.board[piece_row - i][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                return True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == BLACK)):
+                return True
+            else:
+                break
+        # Up and left
+        i = 1
+        while piece_row - i >= 0 and piece_col - i >= 0:
+            piece = self.board[piece_row - i][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                return True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == BLACK)):
+                return True
+            else:
+                break
+        # Down and right
+        i = 1
+        while piece_row + i < 8 and piece_col + i < 8:
+            piece = self.board[piece_row + i][piece_col + i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                return True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == WHITE)):
+                return True
+            else:
+                break
+        # Down and left
+        i = 1
+        while piece_row + i < 8 and piece_col - i >= 0:
+            piece = self.board[piece_row + i][piece_col - i]
+            if piece is None:
+                i += 1
+                continue
+            elif not piece.getPieceColor() == attacking_color:
+                # break since a friendly piece is in the direction. (it is protected)
+                break
+            elif isinstance(piece, Queen) or isinstance(piece, Bishop):
+                return True
+            elif i == 1 and (isinstance(piece, King) or (
+                    isinstance(piece, Pawn) and piece.getPieceColor() == WHITE)):
+                return True
+            else:
+                break
+
+        # Horse Moves
+        if piece_row - 2 >= 0 and piece_col + 1 < 8:
+            piece = self.board[piece_row - 2][piece_col + 1]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row - 1 >= 0 and piece_col - 2 >= 0:
+            piece = self.board[piece_row - 1][piece_col - 2]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row - 1 >= 0 and piece_col + 2 < 8:
+            piece = self.board[piece_row - 1][piece_col + 2]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row - 2 >= 0 and piece_col - 1 >= 0:
+            piece = self.board[piece_row - 2][piece_col - 1]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row + 2 < 8 and piece_col + 1 < 8:
+            piece = self.board[piece_row + 2][piece_col + 1]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row + 1 < 8 and piece_col - 2 >= 0:
+            piece = self.board[piece_row + 1][piece_col - 2]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row + 1 < 8 and piece_col + 2 < 8:
+            piece = self.board[piece_row + 1][piece_col + 2]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        if piece_row + 2 < 8 and piece_col - 1 >= 0:
+            piece = self.board[piece_row + 2][piece_col - 1]
+            if isinstance(piece, Knight) and piece.getPieceColor() == attacking_color:
+                return True
+        return False
+
     def set_king_in_check(self):
-        print("Check!")
+        self.print("Check!")
         if self.turn_player == WHITE:
             self.black_king_checked = True
         else:
@@ -288,11 +848,11 @@ class Board:
         else:
             return self.can_black_king_castle
 
-    def can_castle(self, start_pos, end_pos):
+    def can_castle(self, start_pos, end_pos, board_as_chars):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
         if not self.can_king_castle():
-            print("This King can no longer Castle!")
+            self.print("This King can no longer Castle!")
             return False
 
         if self.turn_player == WHITE:
@@ -309,26 +869,25 @@ class Board:
                 end_piece = "rr"
 
         if start_piece not in self.unmoved_pieces or end_piece not in self.unmoved_pieces:
-            print("Can't castle on this side!")
+            self.print("Can't castle on this side!")
             return False
 
         if self.is_king_in_check():
-            print("Can't Castle while in Check!")
+            self.print("Can't Castle while in Check!")
             return False
 
-        board_as_chars = self.get_board_as_chars()
-        if self.is_piece_attacked((end_row, end_col), board_as_chars):
-            print("Can't Castle, King will be in check")
+        if self.is_piece_attacked((end_row, end_col)):
+            self.print("Can't Castle, King will be in check")
             return False
 
         if start_col > end_col:
             if self.is_piece_attacked((end_row, end_col + 1), board_as_chars):
-                print("Can't Castle, King will pass through check")
+                self.print("Can't Castle, King will pass through check")
                 return False
 
         else:
             if self.is_piece_attacked((end_row, end_col - 1), board_as_chars):
-                print("Can't Castle, King will pass through check")
+                self.print("Can't Castle, King will pass through check")
                 return False
 
         return True
@@ -336,20 +895,44 @@ class Board:
     def castle(self, start_pos, end_pos, start_piece, end_piece):
         start_row, start_col = start_pos
         end_row, end_col = end_pos
-        if self.can_castle(start_pos, end_pos):
-            self.board[end_row][end_col] = copy.deepcopy(start_piece)
-            self.board[start_row][start_col] = None
-            if start_col > end_col:
-                self.board[end_row][end_col + 1] = copy.deepcopy(self.board[end_row][end_col - 2])
-                self.board[end_row][end_col - 2] = None
-            else:
-                self.board[end_row][end_col - 1] = copy.deepcopy(self.board[end_row][end_col + 1])
-                self.board[end_row][end_col + 1] = None
-                self.good_move(start_pos, end_piece, castled=True)
-            return Status.OK
+        self.print("Castling")
+        self.board[end_row][end_col] = start_piece
+        self.board[start_row][start_col] = None
+        # remove king from zobrist
+        piece_index = zobrist_piece_index[start_piece.getPieceAsChar()]
+        board_index = (start_row * 8) + start_col
+        self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+        end_piece_char = "R" if self.turn_player == WHITE else "r"
+        if start_col > end_col:
+            self.board[end_row][end_col + 1] = self.board[end_row][end_col - 2]
+            self.board[end_row][end_col - 2] = None
+            # remove rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col - 2
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # add rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col + 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
         else:
-            self.bad_move()
-            return Status.INVALID_REQUEST
+            self.board[end_row][end_col - 1] = self.board[end_row][end_col + 1]
+            self.board[end_row][end_col + 1] = None
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col + 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # add rook
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_row * 8) + end_col - 1
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+        # add king
+        piece_index = zobrist_piece_index[start_piece.getPieceAsChar()]
+        board_index = (end_row * 8) + end_col
+        self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+        self.good_move(start_pos, end_pos, start_piece, end_piece, castled=True)
+        return Status.OK
+        # else:
+        #     self.bad_move()
+        #     return Status.INVALID_REQUEST
 
     def update_moved_pieces(self, pos):
         if not self.unmoved_pieces:
@@ -383,10 +966,9 @@ class Board:
                     self.board[i][j] = None
                     killed_piece = self.board[move[0]][move[1]]
                     self.board[move[0]][move[1]] = piece
-                    tmp_board = self.get_board_as_chars()
                     if isinstance(piece, King):
                         piece_pos = (move[0], move[1])
-                    if not self.is_piece_attacked(piece_pos, tmp_board, attacking_color=self.turn_player):
+                    if not self.is_piece_attacked(piece_pos, attacking_color=self.turn_player):
                         self.board[i][j] = piece
                         self.board[move[0]][move[1]] = killed_piece
                         return False
@@ -395,7 +977,7 @@ class Board:
         return True
 
     def set_king_in_checkmate(self, checkmated_king_pos):
-        print("Checkmate!!!!!")
+        self.print("Checkmate!!!!!")
         self.checkmate = True
         self.winner = self.turn_player
         self.checked_king_position = checkmated_king_pos
@@ -414,29 +996,25 @@ class Board:
             killed_piece = self.board[end_row + 1][end_col]
             self.board[end_row + 1][end_col] = None
             self.remaining_pieces["p"] -= 1
-            board_as_chars = self.get_board_as_chars()
-            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+            if self.is_piece_attacked(turn_player_king_pos):
                 # undo move
                 self.board[end_row][end_col] = None
                 self.board[start_row][start_col] = start_piece
                 self.board[end_row + 1][end_col] = killed_piece
                 self.remaining_pieces["p"] += 1
-                print("King will be in Check!")
-                if not undo_move:
-                    self.bad_move()
+                self.print("King will be in Check!")
                 return Status.INVALID_REQUEST
         else:
             killed_piece = self.board[end_row - 1][end_col]
             self.board[end_row - 1][end_col] = None
             self.remaining_pieces["P"] -= 1
-            board_as_chars = self.get_board_as_chars()
-            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+            if self.is_piece_attacked(turn_player_king_pos):
                 # undo move
                 self.board[end_row][end_col] = None
                 self.board[start_row][start_col] = start_piece
                 self.board[end_row - 1][end_col] = killed_piece
                 self.remaining_pieces["P"] += 1
-                print("King will be in Check!")
+                self.print("King will be in Check!")
                 if not undo_move:
                     self.bad_move()
                 return Status.INVALID_REQUEST
@@ -452,7 +1030,7 @@ class Board:
                 self.remaining_pieces["P"] += 1
             return Status.OK
 
-        self.good_move(start_pos, killed_piece)
+        self.good_move(start_pos, end_pos, start_piece, killed_piece)
         return Status.OK
 
     def is_stalemate(self):
@@ -467,28 +1045,47 @@ class Board:
         return True
 
     def is_draw_by_insufficient_material(self):
-        sufficient_material = [["K", "N", "B"], ["K", "B", "B"], ["K", "R"], ["K", "Q"], ["K", "P"]]
+        sufficient_material = [["K", "N", "B"], ["K", "R"], ["K", "Q"],
+                               ["K", "P"]]  # , ["K", "B", "B"] Have to be of opposing color
+        remaining_pieces = self.get_remaining_pieces()
         for list in sufficient_material:
             result_white = 1
             result_black = 1
             for piece in list:
-                if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) == 0:
+                if piece not in remaining_pieces:
                     result_white = 0
-                if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) == 0:
+                if piece.lower() not in remaining_pieces:
                     result_black = 0
             if result_white or result_black:
                 return False
         return True
+        # for list in sufficient_material:
+        #     result_white = 1
+        #     result_black = 1
+        #     for piece in list:
+        #         if self.remaining_pieces.get(piece) is None or self.remaining_pieces.get(piece) <= 0:
+        #             result_white = 0
+        #         if self.remaining_pieces.get(piece.lower()) is None or self.remaining_pieces.get(piece.lower()) <= 0:
+        #             result_black = 0
+        #     if result_white or result_black:
+        #         return False
+        # return True
 
-    def is_draw_by_repetition(self):
-        raise NotImplemented
-
-    def check_draw(self, has_piece_been_captured):
-        # To add draw by repetition
-        if has_piece_been_captured:
-            return self.is_stalemate() and self.is_draw_by_insufficient_material()
+    def is_draw_by_repetition(self, start_pos, end_pos, start_piece, end_piece):
+        if self.turns < 7:
+            return False
+        if self.repetition_deque.count(self.repetition_deque[-1]) == 3:
+            return True
         else:
-            return self.is_stalemate()
+            return False
+
+    def check_draw(self, start_pos, end_pos, start_piece, end_piece):
+        # To add draw by repetition
+        if self.has_piece_been_captured:
+            return self.is_stalemate() or self.is_draw_by_repetition(start_pos, end_pos, start_piece,
+                                                                     end_piece) or self.is_draw_by_insufficient_material()
+        else:
+            return self.is_stalemate() or self.is_draw_by_repetition(start_pos, end_pos, start_piece, end_piece)
 
     def get_all_legal_moves(self, start_pos):
         """
@@ -496,12 +1093,17 @@ class Board:
         :param start_pos: Start position of the piece to move
         :return: All possible positions to be moved to
         """
+        if self.is_game_over():
+            return []
         start_row, start_col = start_pos
         all_moves = []
         start_piece = self.board[start_row][start_col]
         if start_piece is None:
             return []
-        for end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=self.get_board_as_chars()):
+        elif start_piece.getPieceColor() == 1 - self.turn_player:
+            return []
+        board_as_chars = self.get_board_as_chars()
+        for end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=board_as_chars):
             end_row, end_col = end_pos
             end_piece = self.board[end_row][end_col]
 
@@ -510,48 +1112,107 @@ class Board:
                                                                                           start_piece,
                                                                                           undo_move=True) == Status.OK:
                     all_moves.append(end_pos)
-                    continue
+                continue
 
             elif isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
-                if self.can_castle(start_pos, end_pos):
+                if self.can_castle(start_pos, end_pos, board_as_chars):
                     all_moves.append(end_pos)
-                    continue
+                continue
 
-            self.board[end_row][end_col] = copy.deepcopy(start_piece)
+            self.board[end_row][end_col] = start_piece
             self.board[start_row][start_col] = None
 
-            board_as_chars = self.get_board_as_chars()
-
             # Check if making the move will put King in Check
+            # Should only update king position if start piece is king !!!!!!!!!
             turn_player_king_pos = self.get_king_pos(self.turn_player)
-            if not self.is_piece_attacked(turn_player_king_pos, board_as_chars):
+            if not self.is_piece_attacked(turn_player_king_pos):
                 all_moves.append(end_pos)
 
             # undo move
-            self.board[start_row][start_col] = copy.deepcopy(start_piece)
-            self.board[end_row][end_col] = copy.deepcopy(end_piece)
+            self.board[start_row][start_col] = start_piece
+            self.board[end_row][end_col] = end_piece
         return all_moves
 
-    def good_move(self, start_pos, end_piece, castled=False, opponent_king_pos=None):
-        self.update_moved_pieces(start_pos)
+    def good_move(self, start_pos, end_pos, start_piece, end_piece, board_chars=None, castled=False,
+                  opponent_king_pos=None,
+                  promoted_piece=None):
+        if board_chars is None:
+            board_chars = self.get_board_as_chars()
+        if self.can_king_castle():
+            self.update_moved_pieces(start_pos)
         self.increment_turns()
+        self.add_to_deque(board_chars)
         self.undone_boards = []
-        has_piece_been_captured = False
 
         if castled:
             self.remove_castling_rights()
+
+            if self.turn_player == WHITE:
+                self.white_castled = True
+            else:
+                self.black_castled = True
 
         if end_piece:
             end_piece_char = end_piece.getPieceAsChar()
             self.add_killed_piece(end_piece_char)
             self.remaining_pieces[end_piece_char] -= 1
-            self.increase_player_score(end_piece.getPieceValue())
-            has_piece_been_captured = True
+            if self.remaining_pieces[end_piece_char] < 0:
+                print(
+                    "Bad value when adding killed_piece {} at move number {} from {} to {}. Start piece = {}\n remaining_pieces: {}".format(
+                        end_piece, self.half_turns, start_pos, end_pos, start_piece, self.remaining_pieces
+                    ))
+            self.total_n_pieces -= 1
+            self.total_piece_values -= end_piece.getEvalValue()
+            # self.increase_player_score(end_piece.getPieceValue())
+            # future idea: https://www.chessprogramming.org/Simplified_Evaluation_Function, doesn't really work
+            # create a helper function that takes the end_piece, and position, and calculates the score of the piece based on the position ( as in the website )
+            self.has_piece_been_captured = True
+            # remove killed piece from zobrist
+            piece_index = zobrist_piece_index[end_piece_char]
+            board_index = (end_pos[0] * 8) + end_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            if isinstance(end_piece, King):
+                self.print("Something went wrong? King was captured!")
+                self.print("Here is the board after capture: {}".format(self.get_board_as_chars()))
+                self.print("Start position: {}".format(start_pos))
+                return Status.INVALID_REQUEST
+        else:
+            self.has_piece_been_captured = False
 
-        if self.check_draw(has_piece_been_captured=has_piece_been_captured):
-            self.change_turn_player()
+        if promoted_piece:
+            promoted_piece_char = promoted_piece.getPieceAsChar()
+            self.remaining_pieces[promoted_piece_char] += 1
+            if self.turn_player == WHITE:
+                self.remaining_pieces["P"] -= 1
+                # remove pawn from zobrist
+                piece_index = zobrist_piece_index["P"]
+                board_index = (start_pos[0] * 8) + start_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                # add promoted piece
+                piece_index = zobrist_piece_index[promoted_piece_char]
+                board_index = (end_pos[0] * 8) + end_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            else:
+                piece_index = zobrist_piece_index["p"]
+                board_index = (start_pos[0] * 8) + start_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                piece_index = zobrist_piece_index[promoted_piece_char]
+                board_index = (end_pos[0] * 8) + end_pos[1]
+                self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+                self.remaining_pieces["p"] -= 1
+        elif not castled:
+            start_piece_char = start_piece.getPieceAsChar()
+            piece_index = zobrist_piece_index[start_piece_char]
+            board_index = (start_pos[0] * 8) + start_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+            # replace at new position
+            piece_index = zobrist_piece_index[start_piece_char]
+            board_index = (end_pos[0] * 8) + end_pos[1]
+            self.zobrist_hash ^= ZOBRIST_TABLE[board_index][piece_index]
+
+        if self.check_draw(start_pos, end_pos, start_piece, end_piece):
             self.draw = True
-            print("Draw!!!!!!!")
+            self.print("Draw!!!!!!!")
             return Status.DRAW
 
         if opponent_king_pos:
@@ -559,6 +1220,8 @@ class Board:
             self.set_king_in_check()
             self.change_turn_player()
             return Status.CHECK
+        else:
+            self.remove_check()
 
         self.change_turn_player()
         return Status.OK
@@ -567,11 +1230,14 @@ class Board:
         self.prev_boards.pop()
 
     def make_move(self, start_pos, end_pos, promote_to=None):
+        self.print("Received make move request: start pos {}, end pos {}, promote_to {}. Move number : {}".format(
+            start_pos, end_pos, promote_to, self.half_turns + 1))
+        print("Current score: {}".format(self.total_piece_values))
         if self.checkmate:
-            print("Game is over! {} won!".format(self.winner))
+            self.print("Game is over! {} won!".format(self.winner))
             return Status.CHECKMATE
         if self.draw:
-            print("Game is over! It's a Draw!")
+            self.print("Game is over! It's a Draw!")
             return Status.DRAW
         start_row, start_col = start_pos
         end_row, end_col = end_pos
@@ -579,20 +1245,22 @@ class Board:
         start_piece = self.board[start_row][start_col]
         end_piece = self.board[end_row][end_col]
 
-        print("Start piece: {}, End piece: {}".format(start_piece, end_piece))
+        self.print("Start piece: {}, End piece: {}".format(start_piece, end_piece))
 
         if start_piece is None:
-            print("No start piece chosen")
+            self.print("No start piece chosen")
             return Status.INVALID_REQUEST
 
         if start_piece.getPieceColor() != self.turn_player:
-            print("Wrong Player!")
+            self.print("Wrong Player!")
             return Status.INVALID_REQUEST
 
-        board_as_chars = self.get_board_as_chars()
+        # board_as_chars = self.get_board_as_chars()
 
-        if end_pos in start_piece.getAllPseudoLegalMoves(pos=start_pos, board=board_as_chars):
+        if end_pos in self.get_all_legal_moves(start_pos):
+            print("Move successful")
             self.prev_boards.append(self.make_copy())
+            promoted_piece = None
 
             if isinstance(start_piece, Pawn) and abs(start_row - end_row) == 2:  # Pawn Double Move
                 # Pawn can be en passant'd
@@ -605,7 +1273,7 @@ class Board:
                 if (end_pos, self.half_turns) in self.en_passant:
                     return self.move_en_passant(start_pos, end_pos, start_piece)
                 else:
-                    print("Not a Legal Move")
+                    self.print("Not a Legal Move")
                     self.bad_move()
                     return Status.INVALID_REQUEST
 
@@ -614,42 +1282,114 @@ class Board:
 
             if isinstance(start_piece, Pawn) and end_row in [0, 7]:
                 if promote_to is None:
-                    print("Select Piece to promote Pawn to")
+                    self.print("Select Piece to promote Pawn to")
                     self.bad_move()
                     return Status.NEED_MORE_INFORMATION
-                promoted_piece = self.POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
-                self.board[end_row][end_col] = copy.deepcopy(promoted_piece)
+                promoted_piece = POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
+                self.board[end_row][end_col] = promoted_piece
                 self.board[start_row][start_col] = None
 
             else:
-                self.board[end_row][end_col] = copy.deepcopy(start_piece)
+                self.board[end_row][end_col] = start_piece
                 self.board[start_row][start_col] = None
 
             board_as_chars = self.get_board_as_chars()
 
-            # Check if making the move will put King in Check
-            turn_player_king_pos = self.get_king_pos(self.turn_player)
-            if self.is_piece_attacked(turn_player_king_pos, board_as_chars):
-                # undo move
-                self.board[start_row][start_col] = copy.deepcopy(start_piece)
-                self.board[end_row][end_col] = copy.deepcopy(end_piece)
-                print("King is under attack!")
-                self.bad_move()
-                return Status.INVALID_REQUEST
-            else:
-                self.remove_check()
-
             # Check if Opposing King is in Check
             opponent_king_pos = self.get_king_pos(1 - self.turn_player)
-            if self.is_piece_attacked(opponent_king_pos, board_as_chars, attacking_color=self.turn_player):
+            if self.is_piece_attacked(opponent_king_pos, attacking_color=self.turn_player):
                 if self.is_king_in_checkmate(opponent_king_pos, board_as_chars):
                     self.set_king_in_checkmate(opponent_king_pos)
                     return Status.CHECKMATE
                 else:
-                    return self.good_move(start_pos, end_piece, opponent_king_pos=opponent_king_pos)
+                    return self.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars,
+                                          opponent_king_pos=opponent_king_pos)
 
-            return self.good_move(start_pos, end_piece)
+            return self.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars,
+                                  promoted_piece=promoted_piece)
 
         else:
-            print("Not a Legal Move")
+            self.print("Not a Legal Move")
             return Status.INVALID_REQUEST
+
+    def get_all_next_boards(self):
+        all_boards = []
+        for start_row, row in enumerate(self.board):
+            for start_col, start_piece in enumerate(row):
+                if start_piece is not None and start_piece.getPieceColor() == self.turn_player:
+
+                    for end_row, end_col in self.get_all_legal_moves((start_row, start_col)):
+                        start_pos = (start_row, start_col)
+                        end_pos = (end_row, end_col)
+                        end_piece = self.board[end_row][end_col]
+                        if isinstance(start_piece, Pawn) and abs(
+                                start_col - end_col) == 1 and end_piece is None:  # En Passant
+                            new_board = Board(initialize=False)
+                            new_board.copy_from(self.make_copy())
+                            new_board.move_en_passant(start_pos, end_pos, start_piece)
+                            new_board.last_move = (start_pos, end_pos, None)
+                            all_boards.insert(len(all_boards) // 2, new_board)
+                            continue
+
+                        if isinstance(start_piece, King) and abs(start_col - end_col) == 2:  # Castling
+                            new_board = Board(initialize=False)
+                            new_board.copy_from(self.make_copy())
+                            new_board.castle(start_pos, end_pos, start_piece, end_piece)
+                            new_board.last_move = (start_pos, end_pos, None)
+                            all_boards.insert(0, new_board)
+                            continue
+
+                        if isinstance(start_piece, Pawn) and end_row in [0, 7]:  # Promote Pawn
+                            for promote_to in ["Bishop", "Knight", "Queen", "Rook"]:
+                                new_board = Board(initialize=False)
+                                new_board.copy_from(self.make_copy())
+                                promoted_piece = POSSIBLE_PROMOTIONS[promote_to](color=self.turn_player)
+                                new_board.board[end_row][end_col] = promoted_piece
+                                new_board.board[start_row][start_col] = None
+
+                                board_as_chars = new_board.get_board_as_chars()
+                                # Check if Opposing King is in Check
+                                opponent_king_pos = new_board.get_king_pos(1 - self.turn_player)
+                                if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
+                                    new_board.set_king_in_checkmate(opponent_king_pos)
+                                    new_board.last_move = (start_pos, end_pos, promote_to)
+                                    all_boards.insert(0, new_board)
+                                else:
+                                    new_board.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars,
+                                                        promoted_piece=promoted_piece)
+                                    new_board.last_move = (start_pos, end_pos, promote_to)
+                                    all_boards.insert(0, new_board)
+                            continue
+
+                        else:
+                            new_board = Board(initialize=False)
+                            new_board.copy_from(self.make_copy())
+                            new_board.board[end_row][end_col] = start_piece
+                            new_board.board[start_row][start_col] = None
+
+                            board_as_chars = new_board.get_board_as_chars()
+
+                            # Check if Opposing King is in Check
+                            opponent_king_pos = new_board.get_king_pos(1 - self.turn_player)
+                            if opponent_king_pos is None:
+                                print("None?")
+                                continue
+                            if new_board.is_king_in_checkmate(opponent_king_pos, board_as_chars):
+                                new_board.set_king_in_checkmate(opponent_king_pos)
+                                new_board.last_move = (start_pos, end_pos, None)
+                                all_boards.insert(0, new_board)
+
+                            else:
+                                new_board.good_move(start_pos, end_pos, start_piece, end_piece, board_as_chars)
+                                new_board.last_move = (start_pos, end_pos, None)
+                                if end_piece:
+                                    all_boards.insert(len(all_boards) // 4, new_board)
+                                else:
+                                    all_boards.append(new_board)
+
+        return all_boards
+
+    def get_squares_to_highlight(self, pos):
+        piece = self.board[pos[0]][pos[1]]
+        if piece is not None:
+            return piece.getAllPseudoLegalMoves(pos=pos, board=self.get_board_as_chars())

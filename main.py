@@ -1,7 +1,7 @@
 import sys
 
 import pygame as p
-
+from threading import Thread
 from Bot import Bot
 from Status import Status
 from Board import Board
@@ -84,13 +84,13 @@ class Engine:
         self.bot2 = None
 
     def start_game(self, player1, player2, viewing_player, switch_viewing_player):
-        self.player1 = player1
+        self.player1 = player1['level'].lower()
         if not self.player1 == "human":
-            self.bot1 = Bot(level=self.player1, color=WHITE)
+            self.bot1 = Bot(attributes=player1, color=WHITE)
 
-        self.player2 = player2
+        self.player2 = player2['level'].lower()
         if not self.player2 == "human":
-            self.bot2 = Bot(level=self.player2, color=BLACK)
+            self.bot2 = Bot(attributes=player2, color=BLACK)
 
         self.turn_player = WHITE
         self.viewing_player = viewing_player
@@ -105,8 +105,7 @@ class Engine:
         p.display.set_caption('Chess')
         self.DISPLAYSURF.fill(SURFACE_COLOR)
         self.loadImages()
-        self.drawBoard()  # draw squares on the board
-        self.drawPieces()  # draw pieces on top of those squares
+        self.drawBoardAndPieces()
 
     def loadImages(self):
         """
@@ -162,6 +161,10 @@ class Engine:
                 self.make_human_move()
             else:
                 self.make_cpu_move()
+            for event in p.event.get():
+                if event.type == p.QUIT:
+                    p.quit()
+                    sys.exit()
             p.display.update()
 
     def make_human_move(self):
@@ -190,18 +193,14 @@ class Engine:
                                 self.draw_circle(self.get_viewed_pos(pos), color=self.highlight_color2)
 
                         elif prev_selection == selected_square:
-                            color = getSquareColor(prev_selection_highlight)
-                            self.highlightSquare(prev_selection_highlight, color=color)
+                            self.drawBoardAndPieces()
                             prev_selection, prev_selection_highlight = None, None
-                            print("Setting prev_selection to: {}".format(prev_selection))
 
                         else:
-                            result = self.make_move(prev_selection, selected_square, prev_selection_highlight,
-                                                    promote_to=promotion)
+                            result = self.make_move(prev_selection, selected_square, promote_to=promotion)
                             if result == Status.NEED_MORE_INFORMATION:
                                 promotion = get_promotion()
-                                result = self.make_move(prev_selection, selected_square, prev_selection_highlight,
-                                                        promote_to=promotion)
+                                result = self.make_move(prev_selection, selected_square, promote_to=promotion)
                                 if result == Status.NEED_MORE_INFORMATION:
                                     color = getSquareColor(prev_selection_highlight)
                                     self.highlightSquare(prev_selection_highlight, color=color)
@@ -214,8 +213,7 @@ class Engine:
                     else:
                         print("Mouse Clicked outside board")
                         if prev_selection:
-                            color = getSquareColor(prev_selection_highlight)
-                            self.highlightSquare(prev_selection_highlight, color=color)
+                            self.drawBoardAndPieces()
                             prev_selection = None
 
                 elif event.type == p.KEYDOWN:
@@ -242,10 +240,10 @@ class Engine:
         else:
             player = self.bot2
 
-        move = player.get_move(self.board)
-        self.make_move(move[0], move[1])
+        start, end, promotion = player.get_move(self.board)
+        self.make_move(start, end, promotion)
 
-    def make_move(self, move_from, move_to, move_from_highlight=None, promote_to=None):
+    def make_move(self, move_from, move_to, promote_to=None):
         result = self.board.make_move(move_from, move_to, promote_to=promote_to)
         if result == Status.OK:
             self.update_board_and_players()
@@ -268,8 +266,7 @@ class Engine:
             self.highlightSquare(king_pos, color=self.check_color)
             return result
         else:
-            color = getSquareColor(move_from_highlight)
-            self.highlightSquare(move_from_highlight, color=color)
+            self.drawBoardAndPieces()
             return result
 
     def is_board_pressed(self, col, row):
@@ -329,12 +326,18 @@ class Engine:
         else:
             self.board_as_chars = self.board.get_board_as_chars(reverse=True)
 
+        self.drawBoardAndPieces()
+
+    def drawBoardAndPieces(self):
         self.drawBoard()  # draw squares on the board
         self.drawPieces()  # draw pieces on top of those squares
+        if self.board.is_king_in_check():
+            king_pos = self.get_viewed_pos(self.board.get_checked_king_position())
+            self.highlightSquare(king_pos, color=self.check_color)
 
     def get_viewed_pos(self, pos):
         if self.viewing_player == BLACK:
-            return self.board_dimensions - pos[0], self.board_dimensions - pos[1]
+            return self.board_dimensions - pos[0] - 1, self.board_dimensions - pos[1] - 1
         else:
             return pos
 
@@ -352,12 +355,12 @@ class Engine:
         textRectObj = textSurfaceObj.get_rect()
         textRectObj.center = (200, 150)
         self.DISPLAYSURF.blit(textSurfaceObj, textRectObj)
-        restartSurfaceObj = fontObj.render('Restart?', True, p.Color("green"))
+        restartSurfaceObj = fontObj.render('Restart?', True, p.Color("green"), p.Color("blue"))
         restartRectObj = restartSurfaceObj.get_rect()
         # restartRectObj = p.Rect(self.x_margin + self.board_size / 4, self.y_margin + self.board_size / 4,
         #                         self.board_size/2, self.board_size/2)
         # self.DISPLAYSURF.blit(restartSurfaceObj, restartRectObj)
-        restartRectObj.center = (DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2)
+        restartRectObj.center = (200, 500)
         self.DISPLAYSURF.blit(restartSurfaceObj, restartRectObj)
         p.display.update()
         while True:
@@ -371,15 +374,32 @@ class Engine:
                         self.DISPLAYSURF.fill(SURFACE_COLOR)
                         p.display.update()
                         return True
+                elif event.type == p.KEYDOWN:
+                    if event.key == p.K_LEFT:
+                        print("GO BACK TO PREV BOARD STATE")
+                        if self.board.go_back_a_move() == Status.OK:
+                            self.update_board_and_players()
+                            if self.board.checked_king_position:
+                                self.highlightSquare(self.get_viewed_pos(self.board.checked_king_position),
+                                                     color=self.check_color)
+
+                    elif event.key == p.K_RIGHT:
+                        print("UNDO GOING BACK TO PREV BOARD STATE")
+                        if self.board.undo_going_back() == Status.OK:
+                            self.update_board_and_players()
+                            if self.board.checked_king_position:
+                                self.highlightSquare(self.get_viewed_pos(self.board.checked_king_position),
+                                                     color=self.check_color)
+            p.display.update()
 
 
 if __name__ == '__main__':
-    engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board())
+    engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board(verbose=True))
     viewing_player = VIEWING_PLAYER
     while True:
         if engine.start_game(player1=PLAYER1, player2=PLAYER2, viewing_player=viewing_player,
                              switch_viewing_player=SWITCH_VIEWING_PLAYER):
-            engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board())
+            engine = Engine(DISPLAY_WIDTH, DISPLAY_HEIGHT, BOARD_SIZE, BOARD_DIMENSIONS, Board(verbose=True))
             viewing_player = VIEWING_PLAYER
             engine.start_game(player1=PLAYER1, player2=PLAYER2, viewing_player=viewing_player,
                               switch_viewing_player=SWITCH_VIEWING_PLAYER)

@@ -219,11 +219,15 @@ class Piece:
     def getPieceAsChar(self):
         raise NotImplemented
 
+    def getEvalValue(self):
+        raise NotImplemented
+
 
 class Rook(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 5
+        self.eval_value = 50
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return list(chain(getAllHorizontalMoves(pos, self.color, board), getAllVerticalMoves(pos, self.color, board)))
@@ -233,6 +237,12 @@ class Rook(Piece):
 
     def getPieceValue(self):
         return self.value
+
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -245,6 +255,7 @@ class Bishop(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 3
+        self.eval_value = 30
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return getAllDiagonalMoves(pos, self.color, board)
@@ -254,6 +265,12 @@ class Bishop(Piece):
 
     def getPieceValue(self):
         return self.value
+
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -266,6 +283,7 @@ class Knight(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 3
+        self.eval_value = 30
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return getLShapedMoves(pos, self.color, board)
@@ -275,6 +293,12 @@ class Knight(Piece):
 
     def getPieceValue(self):
         return self.value
+
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
@@ -287,6 +311,7 @@ class Queen(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 9
+        self.eval_value = 90
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return list(
@@ -299,6 +324,12 @@ class Queen(Piece):
     def getPieceValue(self):
         return self.value
 
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
+
     def getPieceAsChar(self):
         if self.color == WHITE:
             return 'Q'
@@ -310,6 +341,7 @@ class King(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 0
+        self.eval_value = 1
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         if castling:
@@ -328,6 +360,12 @@ class King(Piece):
     def getPieceValue(self):
         return self.value
 
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
+
     def getPieceAsChar(self):
         if self.color == WHITE:
             return 'K'
@@ -339,6 +377,7 @@ class Pawn(Piece):
     def __init__(self, color=None):
         self.color = color
         self.value = 1
+        self.eval_value = 10
 
     def getAllPseudoLegalMoves(self, pos, board, castling=True):
         return list(chain(getPawnMoves(pos, self.color, board), getEnPassantMoves(pos, self.color, board)))
@@ -348,6 +387,12 @@ class Pawn(Piece):
 
     def getPieceValue(self):
         return self.value
+
+    def getEvalValue(self):
+        if self.color == WHITE:
+            return self.eval_value
+        else:
+            return - self.eval_value
 
     def getPieceAsChar(self):
         if self.color == WHITE:
